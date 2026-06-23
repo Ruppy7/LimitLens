@@ -1,10 +1,11 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, WindowEvent,
+    Manager, PhysicalPosition, Position, WindowEvent,
 };
 
 const MAIN_WINDOW: &str = "main";
+const POPUP_MARGIN: i32 = 16;
 
 pub fn create(app: &tauri::App) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
@@ -57,9 +58,7 @@ fn toggle_main_window(app: &tauri::AppHandle) {
         return;
     }
 
-    let _ = window.unminimize();
-    let _ = window.show();
-    let _ = window.set_focus();
+    show_popup_window(&window);
 }
 
 fn show_main_window(app: &tauri::AppHandle) {
@@ -67,7 +66,31 @@ fn show_main_window(app: &tauri::AppHandle) {
         return;
     };
 
+    show_popup_window(&window);
+}
+
+fn show_popup_window(window: &tauri::WebviewWindow) {
+    position_near_bottom_right(window);
     let _ = window.unminimize();
     let _ = window.show();
     let _ = window.set_focus();
+}
+
+fn position_near_bottom_right(window: &tauri::WebviewWindow) {
+    let Ok(Some(monitor)) = window.current_monitor() else {
+        return;
+    };
+    let Ok(window_size) = window.outer_size() else {
+        return;
+    };
+
+    let work_area = monitor.work_area();
+    let x = work_area.position.x + work_area.size.width as i32
+        - window_size.width as i32
+        - POPUP_MARGIN;
+    let y = work_area.position.y + work_area.size.height as i32
+        - window_size.height as i32
+        - POPUP_MARGIN;
+
+    let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
 }

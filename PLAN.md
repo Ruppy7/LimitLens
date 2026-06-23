@@ -116,6 +116,7 @@ Ponytail scope: prove the desktop shell first, then add tray behavior. No settin
 - [x] Replace starter placeholder with minimal static tray-panel UI and provider placeholders.
 - [x] Windows popup UI checkpoint passed: latest branch pulled on Windows and static provider panel renders correctly.
 - [x] Add handoff doc for Windows/Codex Desktop workflow.
+- [x] Make the main window behave more like a tray popup: smaller fixed size, no maximize button, and bottom-right positioning when shown.
 
 ## Phase 2 — Plugin host prototype
 

@@ -13,8 +13,10 @@
     "windows": [
       {
         "title": "InfUsage",
-        "width": 800,
-        "height": 600
+        "width": 360,
+        "height": 420,
+        "resizable": false,
+        "maximizable": false
       }
     ],
     "security": {

@@ -47,6 +47,7 @@ Passed on Windows:
 - Tray menu `Show` restores it.
 - Tray menu `Quit` exits.
 - Static provider panel renders on `phase-1-shell`.
+- Main window is a small fixed-size tray popup and positions near the bottom-right when shown.
 
 Current UI:
 
@@ -60,12 +61,11 @@ Current UI:
 
 ## Next likely step
 
-Make the current window behave more like a tray popup:
+Start Phase 2 with the smallest plugin host prototype:
 
-- smaller default size
-- non-resizable
-- no maximize button if Tauri/Windows supports it cleanly
-- position near bottom-right on tray click
+- define the first tiny `ctx.host` shape
+- run one fake provider plugin
+- prove plugins only touch app capabilities through `ctx.host`
 
 Skip for now:
 
