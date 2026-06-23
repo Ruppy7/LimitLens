@@ -68,6 +68,25 @@ Why npm: this environment has Node/npm installed; pnpm, yarn, Rust/Cargo are not
 - [ ] Xiaomi MiMo Token Plan Lite: revisit after core providers; capture sanitized `/tokenPlan/detail` and `/tokenPlan/usage` responses and test `tp-…` authorization.
 - [ ] DeepSeek detailed usage: revisit only if DeepSeek publishes a documented usage API.
 
+## Reference project takeaways
+
+Rob Ebers' `openusage` is the main inspiration: Tauri + React, bundled provider plugins, a Rust plugin host, normalized metric lines, and a tray/menu-bar first UX. InfUsage should copy the proven shape, not the mature app's full surface area.
+
+Use from `robinebers/openusage`:
+
+- Provider plugin shape: manifest + `plugin.js` + `probe(ctx)`.
+- Normalized output lines: progress, text, badge first; charts later.
+- Provider docs beside implementations.
+- Failure-tolerant provider behavior: hidden, stale, unavailable, and error states instead of crashes.
+- Bounded provider probing once multiple providers exist.
+
+Avoid until forced:
+
+- Local HTTP API, proxy support, analytics, updater, autostart, global shortcuts, broad host capabilities, and multi-store React state.
+- Copying OpenUsage's OpenCode Go local SQLite spend logic. InfUsage should use authenticated workspace quota extraction because OpenCode Go usage is workspace/subscription scoped across keys, members, and devices.
+
+Jane Baraniewski's `openusage` is only a reference for terminal-first reporting ideas: local history, burn-rate concepts, CLI/headless reports, and zero-config detection. Its Go daemon/TUI architecture is not part of InfUsage.
+
 ## Phase 0 — Setup and foundational decisions
 
 **Decisions:** D1, D2, D3.
@@ -80,16 +99,19 @@ Why npm: this environment has Node/npm installed; pnpm, yarn, Rust/Cargo are not
 - [x] Ponytail trim scaffold: remove demo UI, demo IPC command, opener plugin, starter SVG assets, and stale build output.
 - [x] Install npm dependencies.
 - [x] Run frontend TypeScript/Vite build check.
-- [ ] Install/verify Rust prerequisites. Current environment has Node/npm but no `cargo`/`rustc`.
-- [ ] Run first Tauri desktop dev/build check after Rust prerequisites are installed.
+- [x] Install/verify Rust prerequisites on Windows. Rust/Cargo worked for Phase 1; Visual Studio Build Tools not installed yet and deferred until a native build/link failure actually requires them.
+- [x] Run first Tauri desktop dev check on Windows.
 - [x] Decide D3 backend language: Rust inside Tauri, no sidecar/framework.
 
 ## Phase 1 — Tray shell
 
-- Build a simple tray icon.
-- Open/close popup panel.
-- Add settings window.
-- Keep tray logic in Rust.
+Ponytail scope: prove the desktop shell first, then add tray behavior. No settings window, global shortcut, updater, autostart, local HTTP API, plugin runtime, or provider code in this phase.
+
+- [x] Decide first shell build target: window sanity check + minimal tray toggle.
+- [x] Build the smallest useful Tauri shell: one main window.
+- [x] Add tray icon with left-click toggle and Show/Quit menu.
+- [x] Keep tray logic in Rust.
+- [x] Windows checkpoint passed: `npm run tauri dev` showed tray icon, left-click toggled the window, close hid the window, and Quit exited the app.
 
 ## Phase 2 — Plugin host prototype
 

@@ -42,6 +42,16 @@ npm run tauri dev
 
 `npm run tauri dev` requires Rust/Cargo and OS-specific Tauri prerequisites. This environment currently has Node/npm but not Rust/Cargo.
 
+For Windows setup, see [docs/windows-dev-setup.md](docs/windows-dev-setup.md).
+
+Phase 1 tray checkpoint must be tested from Windows, not WSL:
+
+- tray icon appears
+- left-click toggles the main window
+- closing the window hides it
+- tray menu `Show` restores it
+- tray menu `Quit` exits the app
+
 ## Project docs
 
 - `PLAN.md` — scope, phases, and decision log.
