@@ -33,6 +33,7 @@ function App() {
   const [codexSnapshot, setCodexSnapshot] = useState<ProviderSnapshot | null>(null);
   const [deepseekSnapshot, setDeepseekSnapshot] = useState<ProviderSnapshot | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Record<string, number>>({});
+  const [snapshotHistory, setSnapshotHistory] = useState<SavedSnapshot[]>([]);
   const [status, setStatus] = useState("Idle");
   const [error, setError] = useState("");
 
@@ -70,13 +71,23 @@ function App() {
         setLastUpdatedAt(updatedAt);
       })
       .catch(() => {});
+
+    invoke<SavedSnapshot[]>("list_snapshot_history")
+      .then(setSnapshotHistory)
+      .catch(() => {});
   }, []);
 
-  function markUpdated(snapshot: ProviderSnapshot) {
+  function markUpdated(snapshot: ProviderSnapshot, capturedAt = Math.floor(Date.now() / 1000)) {
     setLastUpdatedAt((current) => ({
       ...current,
-      [snapshot.provider_id]: Math.floor(Date.now() / 1000),
+      [snapshot.provider_id]: capturedAt,
     }));
+    setSnapshotHistory((current) =>
+      [{ provider_id: snapshot.provider_id, captured_at: capturedAt, snapshot }, ...current]
+        .filter((saved) => saved.provider_id === snapshot.provider_id)
+        .slice(0, 10)
+        .concat(current.filter((saved) => saved.provider_id !== snapshot.provider_id)),
+    );
   }
 
   function updatedLabel(providerId: string) {
@@ -92,6 +103,39 @@ function App() {
     return `Updated ${pad(date.getDate())}-${pad(date.getMonth() + 1)} ${pad(
       date.getHours(),
     )}:${pad(date.getMinutes())}`;
+  }
+
+  function shortDate(capturedAt: number) {
+    const date = new Date(capturedAt * 1000);
+    const pad = (value: number) => String(value).padStart(2, "0");
+
+    return `${pad(date.getDate())}-${pad(date.getMonth() + 1)} ${pad(
+      date.getHours(),
+    )}:${pad(date.getMinutes())}`;
+  }
+
+  function providerHistory(providerId: string) {
+    return snapshotHistory.filter((saved) => saved.provider_id === providerId);
+  }
+
+  function renderHistory(providerId: string) {
+    const history = providerHistory(providerId);
+
+    if (history.length === 0) {
+      return null;
+    }
+
+    return (
+      <details className="history">
+        <summary>Recent</summary>
+        {history.map((saved, index) => (
+          <div className="history-row" key={`${saved.provider_id}-${saved.captured_at}-${index}`}>
+            <span>{shortDate(saved.captured_at)}</span>
+            <strong>{saved.snapshot.lines[0]?.value || "Updated"}</strong>
+          </div>
+        ))}
+      </details>
+    );
   }
 
   async function saveKey() {
@@ -198,6 +242,7 @@ function App() {
             </div>
           ))}
           {codexSnapshot && <p className="updated-at">{updatedLabel("codex")}</p>}
+          {renderHistory("codex")}
         </div>
 
         <div className="provider-block">
@@ -221,6 +266,7 @@ function App() {
             </div>
           ))}
           {claudeSnapshot && <p className="updated-at">{updatedLabel("claude")}</p>}
+          {renderHistory("claude")}
         </div>
 
         <div className="provider-block">
@@ -284,6 +330,7 @@ function App() {
             </div>
           ))}
           {deepseekSnapshot && <p className="updated-at">{updatedLabel("deepseek")}</p>}
+          {renderHistory("deepseek")}
         </div>
 
         {placeholders.map((provider) => (
@@ -294,7 +341,7 @@ function App() {
         ))}
       </section>
 
-      <footer>{error || "No spend history stored yet."}</footer>
+      <footer>{error || "Latest snapshots are stored locally."}</footer>
     </main>
   );
 }

@@ -154,3 +154,8 @@ pub fn refresh_claude(app: tauri::AppHandle) -> Result<plugin_host::ProviderSnap
 pub fn list_saved_snapshots(app: tauri::AppHandle) -> Result<Vec<SavedSnapshot>, String> {
     snapshot_store::load_all(&app).map_err(|error| error.to_string())
 }
+
+#[tauri::command]
+pub fn list_snapshot_history(app: tauri::AppHandle) -> Result<Vec<SavedSnapshot>, String> {
+    snapshot_store::load_history(&app).map_err(|error| error.to_string())
+}

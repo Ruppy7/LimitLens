@@ -21,7 +21,7 @@ Current decided stack:
 - D3 backend: Rust inside Tauri; no sidecar/framework.
 - D4 plugin runtime: QuickJS via `rquickjs`.
 - D7 secret storage: Windows Credential Manager via `keyring`.
-- D6 storage: JSON file for latest snapshots; defer SQLite until real query/history needs exist.
+- D6 storage: JSON file for latest snapshots plus capped recent history; defer SQLite until real query needs exist.
 - Scaffold: official `create-tauri-app` template with npm.
 
 Current branch:
