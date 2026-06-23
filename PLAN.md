@@ -135,6 +135,8 @@ Ponytail scope: prove the desktop shell first, then add tray behavior. No settin
 - [x] Keep credentials in the trusted host.
 - [x] Add a minimal Codex provider slice: Rust reads local Codex auth, refreshes expired login once, calls the undocumented usage endpoint, and exposes only sanitized remaining-quota/reset summary JSON to the JavaScript plugin.
 - [ ] Windows checkpoint: verify Codex refresh from the tray popup against the user's local Codex login.
+- [x] Add a minimal Claude / Claude Code provider slice: Rust reads local Claude Code credentials, refreshes expired login once, calls the undocumented OAuth usage endpoint, and exposes only sanitized remaining-quota/reset summary JSON to the JavaScript plugin.
+- [ ] Windows checkpoint: verify Claude refresh from the tray popup against the user's local Claude Code login.
 
 ## Phase 4 — Storage and history
 
@@ -144,7 +146,7 @@ Ponytail scope: prove the desktop shell first, then add tray behavior. No settin
 ## Phase 5 — More providers
 
 - OpenAI Codex provider deeper follow-ups only if needed: reset timing, stale state, plan labels, model-specific limits.
-- Anthropic Claude / Claude Code provider.
+- Anthropic Claude / Claude Code deeper follow-ups only if needed: OS credential lookup, local token-spend history, model-specific weekly limits, extra usage credits.
 - OpenCode Go provider.
 - Antigravity provider.
 - Optional DeepSeek balance provider.

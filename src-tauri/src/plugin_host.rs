@@ -21,6 +21,7 @@ pub struct MetricLine {
 
 pub trait Host {
     fn app_name(&self) -> &'static str;
+    fn claude_usage_json(&self) -> String;
     fn codex_usage_json(&self) -> String;
     fn deepseek_balance_json(&self) -> String;
 }
@@ -30,6 +31,10 @@ pub struct InfUsageHost;
 impl Host for InfUsageHost {
     fn app_name(&self) -> &'static str {
         "InfUsage"
+    }
+
+    fn claude_usage_json(&self) -> String {
+        r#"{"plan_type":null,"session_remaining_percent":null,"session_reset_at":null,"weekly_remaining_percent":null,"weekly_reset_at":null}"#.to_string()
     }
 
     fn codex_usage_json(&self) -> String {
@@ -73,7 +78,7 @@ function probe(ctx) {
 
 const CODEX_PROVIDER: &str = r#"
 function formatResetAt(seconds) {
-  const date = new Date(seconds * 1000);
+  const date = typeof seconds === "number" ? new Date(seconds * 1000) : new Date(seconds);
   const pad = (value) => String(value).padStart(2, "0");
   return `${pad(date.getDate())}-${pad(date.getMonth() + 1)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
@@ -102,6 +107,38 @@ function probe(ctx) {
 
   return {
     providerId: "codex",
+    lines
+  };
+}
+"#;
+
+const CLAUDE_PROVIDER: &str = r#"
+function formatResetAt(value) {
+  const date = typeof value === "number" ? new Date(value * 1000) : new Date(value);
+  const pad = (next) => String(next).padStart(2, "0");
+  return `${pad(date.getDate())}-${pad(date.getMonth() + 1)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function probe(ctx) {
+  const usage = JSON.parse(ctx.host.claudeUsageJson());
+  const lines = [];
+
+  if (usage.plan_type) {
+    lines.push({ label: "Plan", value: String(usage.plan_type) });
+  }
+
+  if (usage.session_remaining_percent !== null && usage.session_remaining_percent !== undefined) {
+    const reset = usage.session_reset_at ? ` - ${formatResetAt(usage.session_reset_at)}` : "";
+    lines.push({ label: "Session remaining", value: `${usage.session_remaining_percent}%${reset}` });
+  }
+
+  if (usage.weekly_remaining_percent !== null && usage.weekly_remaining_percent !== undefined) {
+    const reset = usage.weekly_reset_at ? ` - ${formatResetAt(usage.weekly_reset_at)}` : "";
+    lines.push({ label: "Weekly remaining", value: `${usage.weekly_remaining_percent}%${reset}` });
+  }
+
+  return {
+    providerId: "claude",
     lines
   };
 }
@@ -142,6 +179,10 @@ pub fn run_codex_provider(host: &impl Host) -> Result<ProviderSnapshot, PluginRu
     run_provider(CODEX_PROVIDER, host)
 }
 
+pub fn run_claude_provider(host: &impl Host) -> Result<ProviderSnapshot, PluginRunError> {
+    run_provider(CLAUDE_PROVIDER, host)
+}
+
 pub fn run_provider(source: &str, host: &impl Host) -> Result<ProviderSnapshot, PluginRunError> {
     let runtime = Runtime::new()?;
     runtime.set_memory_limit(PLUGIN_MEMORY_LIMIT_BYTES);
@@ -154,12 +195,17 @@ pub fn run_provider(source: &str, host: &impl Host) -> Result<ProviderSnapshot, 
 
     let context = Context::full(&runtime)?;
     let app_name = host.app_name().to_string();
+    let claude_usage_json = host.claude_usage_json();
     let codex_usage_json = host.codex_usage_json();
     let deepseek_balance_json = host.deepseek_balance_json();
 
     context.with(|ctx| -> Result<ProviderSnapshot, PluginRunError> {
         let host = Object::new(ctx.clone())?;
         host.set("appName", Func::new(move || app_name.clone()))?;
+        host.set(
+            "claudeUsageJson",
+            Func::new(move || claude_usage_json.clone()),
+        )?;
         host.set(
             "codexUsageJson",
             Func::new(move || codex_usage_json.clone()),
@@ -216,6 +262,7 @@ mod tests {
     use super::*;
 
     struct FakeHost {
+        claude_usage_json: String,
         codex_usage_json: String,
         deepseek_balance_json: String,
     }
@@ -223,6 +270,10 @@ mod tests {
     impl Host for FakeHost {
         fn app_name(&self) -> &'static str {
             "InfUsage"
+        }
+
+        fn claude_usage_json(&self) -> String {
+            self.claude_usage_json.clone()
         }
 
         fn codex_usage_json(&self) -> String {
@@ -283,6 +334,7 @@ mod tests {
     #[test]
     fn deepseek_provider_normalizes_balance_lines() {
         let host = FakeHost {
+            claude_usage_json: "{}".to_string(),
             codex_usage_json: "{}".to_string(),
             deepseek_balance_json: r#"
             {
@@ -317,6 +369,7 @@ mod tests {
     #[test]
     fn codex_provider_normalizes_usage_lines() {
         let host = FakeHost {
+            claude_usage_json: "{}".to_string(),
             codex_usage_json: r#"
             {
               "plan_type": "pro",
@@ -357,5 +410,33 @@ mod tests {
                 ],
             }
         );
+    }
+
+    #[test]
+    fn claude_provider_normalizes_usage_lines() {
+        let host = FakeHost {
+            claude_usage_json: r#"
+            {
+              "plan_type": "pro 5x",
+              "session_remaining_percent": 75,
+              "session_reset_at": "2099-01-01T00:00:00.000Z",
+              "weekly_remaining_percent": 60,
+              "weekly_reset_at": "2099-01-07T00:00:00.000Z"
+            }
+            "#
+            .to_string(),
+            codex_usage_json: "{}".to_string(),
+            deepseek_balance_json: "{}".to_string(),
+        };
+
+        let snapshot = run_claude_provider(&host).expect("Claude plugin should run");
+
+        assert_eq!(snapshot.provider_id, "claude".to_string(),);
+        assert_eq!(snapshot.lines.len(), 3);
+        assert_eq!(snapshot.lines[0].label, "Plan");
+        assert_eq!(snapshot.lines[1].label, "Session remaining");
+        assert!(snapshot.lines[1].value.starts_with("75% - "));
+        assert_eq!(snapshot.lines[2].label, "Weekly remaining");
+        assert!(snapshot.lines[2].value.starts_with("60% - "));
     }
 }

@@ -17,12 +17,13 @@ type DeepSeekKeySlot = {
   has_key: boolean;
 };
 
-const placeholders = ["Claude / Claude Code", "OpenCode Go", "Antigravity"];
+const placeholders = ["OpenCode Go", "Antigravity"];
 
 function App() {
   const [apiKey, setApiKey] = useState("");
   const [keySlots, setKeySlots] = useState<DeepSeekKeySlot[]>([]);
   const [isAddingKey, setIsAddingKey] = useState(false);
+  const [claudeSnapshot, setClaudeSnapshot] = useState<ProviderSnapshot | null>(null);
   const [codexSnapshot, setCodexSnapshot] = useState<ProviderSnapshot | null>(null);
   const [deepseekSnapshot, setDeepseekSnapshot] = useState<ProviderSnapshot | null>(null);
   const [status, setStatus] = useState("Idle");
@@ -100,6 +101,19 @@ function App() {
     }
   }
 
+  async function refreshClaude() {
+    setError("");
+    setStatus("Refreshing");
+    try {
+      const nextSnapshot = await invoke<ProviderSnapshot>("refresh_claude");
+      setClaudeSnapshot(nextSnapshot);
+      setStatus("Updated");
+    } catch (caught) {
+      setStatus("Error");
+      setError(String(caught));
+    }
+  }
+
   return (
     <main className="panel">
       <header className="panel-header">
@@ -126,6 +140,28 @@ function App() {
           </div>
 
           {codexSnapshot?.lines.map((line) => (
+            <div className="metric-row" key={line.label}>
+              <span>{line.label}</span>
+              <strong>{line.value}</strong>
+            </div>
+          ))}
+        </div>
+
+        <div className="provider-block">
+          <div className="provider-row">
+            <span>Claude / Claude Code</span>
+            <span className={claudeSnapshot ? "ok" : "muted"}>
+              {claudeSnapshot ? "Updated" : "Uses local login"}
+            </span>
+          </div>
+
+          <div className="deepseek-actions">
+            <button onClick={refreshClaude} type="button">
+              Refresh
+            </button>
+          </div>
+
+          {claudeSnapshot?.lines.map((line) => (
             <div className="metric-row" key={line.label}>
               <span>{line.label}</span>
               <strong>{line.value}</strong>

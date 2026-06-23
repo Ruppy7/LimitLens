@@ -56,3 +56,4 @@ Phase 3 current state:
 - DeepSeek API keys are saved through Rust into Windows Credential Manager.
 - The popup can save one DeepSeek key, delete it to replace it, refresh balance, and render only USD remaining.
 - Codex provider slice is in progress: Rust reads local Codex `auth.json`, refreshes expired login once, calls the undocumented usage endpoint, and exposes only plan/session remaining/session reset/weekly remaining/weekly reset/credits summary JSON to the plugin/UI.
+- Claude provider slice is in progress: Rust reads local Claude Code `.credentials.json`, refreshes expired login once, calls the undocumented OAuth usage endpoint, and exposes only plan/session remaining/session reset/weekly remaining/weekly reset summary JSON to the plugin/UI.

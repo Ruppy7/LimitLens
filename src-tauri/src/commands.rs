@@ -1,6 +1,6 @@
 use crate::{
     plugin_host,
-    providers::{codex, deepseek},
+    providers::{claude, codex, deepseek},
     secrets,
 };
 
@@ -11,6 +11,10 @@ struct DeepSeekHost {
 impl plugin_host::Host for DeepSeekHost {
     fn app_name(&self) -> &'static str {
         "InfUsage"
+    }
+
+    fn claude_usage_json(&self) -> String {
+        "{}".to_string()
     }
 
     fn codex_usage_json(&self) -> String {
@@ -31,8 +35,34 @@ impl plugin_host::Host for CodexHost {
         "InfUsage"
     }
 
+    fn claude_usage_json(&self) -> String {
+        "{}".to_string()
+    }
+
     fn codex_usage_json(&self) -> String {
         self.usage_json.clone()
+    }
+
+    fn deepseek_balance_json(&self) -> String {
+        "{}".to_string()
+    }
+}
+
+struct ClaudeHost {
+    usage_json: String,
+}
+
+impl plugin_host::Host for ClaudeHost {
+    fn app_name(&self) -> &'static str {
+        "InfUsage"
+    }
+
+    fn claude_usage_json(&self) -> String {
+        self.usage_json.clone()
+    }
+
+    fn codex_usage_json(&self) -> String {
+        "{}".to_string()
     }
 
     fn deepseek_balance_json(&self) -> String {
@@ -102,4 +132,11 @@ pub fn refresh_codex() -> Result<plugin_host::ProviderSnapshot, String> {
     let usage_json = codex::fetch_usage_summary_json().map_err(|error| error.to_string())?;
 
     plugin_host::run_codex_provider(&CodexHost { usage_json }).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn refresh_claude() -> Result<plugin_host::ProviderSnapshot, String> {
+    let usage_json = claude::fetch_usage_summary_json().map_err(|error| error.to_string())?;
+
+    plugin_host::run_claude_provider(&ClaudeHost { usage_json }).map_err(|error| error.to_string())
 }
