@@ -7,15 +7,16 @@
 
 body {
   margin: 0;
+  overflow: hidden;
 }
 
 .panel {
-  min-height: 100vh;
+  height: 100vh;
   box-sizing: border-box;
   padding: 0.9rem;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0.8rem;
-  align-content: center;
 }
 
 .panel-header,
@@ -59,8 +60,9 @@ footer,
 .provider-list {
   border: 1px solid #d0d5dd;
   border-radius: 0.5rem;
-  overflow: hidden;
+  overflow-y: auto;
   background: #fff;
+  min-height: 0;
 }
 
 .provider-row {
@@ -169,6 +171,7 @@ footer {
     background: #1f2937;
   }
 
+  .provider-block + .provider-row,
   .provider-row + .provider-row {
     border-top-color: #374151;
   }
