@@ -10,8 +10,8 @@ use std::{
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 
 /// Spend/token totals computed locally from OpenCode's SQLite database. This is
-/// the zero-auth, this-device view (the metric every other OpenCode tracker
-/// ships); it is not the subscription quota that the console reports.
+/// the zero-auth, this-device OpenCode Go provider view; it is not the
+/// subscription quota that the console reports.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Default)]
 pub struct SpendSummary {
     pub cost_7d: f64,
@@ -133,7 +133,8 @@ fn aggregate_sql(cutoff_7d: &str, cutoff_30d: &str) -> String {
             COALESCE(SUM(COALESCE(cost, 0)), 0.0), \
             COALESCE(SUM(CASE WHEN COALESCE(time_updated, time_created) >= {cutoff_30d} THEN COALESCE(tokens_input, 0) + COALESCE(tokens_output, 0) END), 0), \
             COALESCE(SUM(CASE WHEN COALESCE(time_updated, time_created) >= {cutoff_30d} THEN 1 END), 0) \
-         FROM session"
+         FROM session \
+         WHERE json_valid(model) AND json_extract(model, '$.providerID') = 'opencode-go'"
     )
 }
 
@@ -280,6 +281,7 @@ mod tests {
                     id TEXT PRIMARY KEY, \
                     time_created INTEGER, \
                     time_updated INTEGER NOT NULL, \
+                    model TEXT NOT NULL, \
                     cost REAL NOT NULL DEFAULT 0, \
                     tokens_input INTEGER NOT NULL DEFAULT 0, \
                     tokens_output INTEGER NOT NULL DEFAULT 0\
@@ -289,11 +291,30 @@ mod tests {
     }
 
     fn insert(connection: &Connection, id: &str, time_updated: i64, cost: f64, ti: i64, to: i64) {
+        insert_with_provider(connection, id, time_updated, cost, ti, to, "opencode-go");
+    }
+
+    fn insert_with_provider(
+        connection: &Connection,
+        id: &str,
+        time_updated: i64,
+        cost: f64,
+        ti: i64,
+        to: i64,
+        provider_id: &str,
+    ) {
         connection
             .execute(
-                "INSERT INTO session (id, time_created, time_updated, cost, tokens_input, tokens_output) \
-                 VALUES (?1, ?2, ?2, ?3, ?4, ?5)",
-                rusqlite::params![id, time_updated, cost, ti, to],
+                "INSERT INTO session (id, time_created, time_updated, model, cost, tokens_input, tokens_output) \
+                 VALUES (?1, ?2, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![
+                    id,
+                    time_updated,
+                    format!(r#"{{"providerID":"{provider_id}"}}"#),
+                    cost,
+                    ti,
+                    to
+                ],
             )
             .unwrap();
     }
@@ -307,6 +328,15 @@ mod tests {
         insert(&connection, "today", now - 1 * DAY_MS, 1.0, 100, 50); // in 7d, 30d
         insert(&connection, "two_weeks", now - 14 * DAY_MS, 2.0, 200, 100); // in 30d only
         insert(&connection, "old", now - 90 * DAY_MS, 4.0, 999, 999); // all-time only
+        insert_with_provider(
+            &connection,
+            "other_provider",
+            now - 1 * DAY_MS,
+            99.0,
+            999,
+            999,
+            "deepseek",
+        );
 
         let summary = summarize(&connection, now).unwrap();
 
