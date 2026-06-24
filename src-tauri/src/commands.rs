@@ -1,9 +1,35 @@
 use crate::{
     plugin_host,
-    providers::{claude, codex, deepseek},
+    providers::{claude, codex, deepseek, opencode_db},
     secrets,
     snapshot_store::{self, SavedSnapshot},
 };
+
+struct OpenCodeHost {
+    usage_json: String,
+}
+
+impl plugin_host::Host for OpenCodeHost {
+    fn app_name(&self) -> &'static str {
+        "InfUsage"
+    }
+
+    fn claude_usage_json(&self) -> String {
+        "{}".to_string()
+    }
+
+    fn codex_usage_json(&self) -> String {
+        "{}".to_string()
+    }
+
+    fn deepseek_balance_json(&self) -> String {
+        "{}".to_string()
+    }
+
+    fn opencode_usage_json(&self) -> String {
+        self.usage_json.clone()
+    }
+}
 
 struct DeepSeekHost {
     balance_json: String,
@@ -24,6 +50,10 @@ impl plugin_host::Host for DeepSeekHost {
 
     fn deepseek_balance_json(&self) -> String {
         self.balance_json.clone()
+    }
+
+    fn opencode_usage_json(&self) -> String {
+        "{}".to_string()
     }
 }
 
@@ -47,6 +77,10 @@ impl plugin_host::Host for CodexHost {
     fn deepseek_balance_json(&self) -> String {
         "{}".to_string()
     }
+
+    fn opencode_usage_json(&self) -> String {
+        "{}".to_string()
+    }
 }
 
 struct ClaudeHost {
@@ -67,6 +101,10 @@ impl plugin_host::Host for ClaudeHost {
     }
 
     fn deepseek_balance_json(&self) -> String {
+        "{}".to_string()
+    }
+
+    fn opencode_usage_json(&self) -> String {
         "{}".to_string()
     }
 }
@@ -158,4 +196,19 @@ pub fn list_saved_snapshots(app: tauri::AppHandle) -> Result<Vec<SavedSnapshot>,
 #[tauri::command]
 pub fn list_snapshot_history(app: tauri::AppHandle) -> Result<Vec<SavedSnapshot>, String> {
     snapshot_store::load_history(&app).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn refresh_opencode(app: tauri::AppHandle) -> Result<plugin_host::ProviderSnapshot, String> {
+    let spend_json = match opencode_db::read_spend_summary_json() {
+        Ok(json) => json,
+        Err(error) => return Err(error.to_string()),
+    };
+
+    let usage_json = format!("{{\"spend\":{spend_json}}}");
+
+    let snapshot = plugin_host::run_opencode_provider(&OpenCodeHost { usage_json })
+        .map_err(|error| error.to_string())?;
+    snapshot_store::save_latest(&app, &snapshot).map_err(|error| error.to_string())?;
+    Ok(snapshot)
 }

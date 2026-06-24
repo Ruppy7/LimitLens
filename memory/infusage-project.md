@@ -22,6 +22,8 @@ Current decided stack:
 - D4 plugin runtime: QuickJS via `rquickjs`.
 - D7 secret storage: Windows Credential Manager via `keyring`.
 - D6 storage: JSON file for latest snapshots plus capped recent history; defer SQLite until real query needs exist.
+- D8 OpenCode quota auth: deferred; local `auth.json` key is inference-only, session-cookie quota needs an app-owned browser/session flow if revived.
+- D9 OpenCode primary data: local read-only `opencode.db` spend/tokens, with Windows, Unix/WSL, and `OPENCODE_DB` path discovery.
 - Scaffold: official `create-tauri-app` template with npm.
 
 Current branch:
@@ -58,3 +60,4 @@ Phase 3 current state:
 - The popup can save one DeepSeek key, delete it to replace it, refresh balance, and render only USD remaining.
 - Codex provider slice is in progress: Rust reads local Codex `auth.json`, refreshes expired login once, calls the undocumented usage endpoint, and exposes only plan/session remaining/session reset/weekly remaining/weekly reset/credits summary JSON to the plugin/UI.
 - Claude provider slice is in progress: Rust reads local Claude Code `.credentials.json`, refreshes expired login once, calls the undocumented OAuth usage endpoint, and exposes only plan/session remaining/session reset/weekly remaining/weekly reset summary JSON to the plugin/UI.
+- OpenCode Go provider slice is in progress: Rust reads local `opencode.db` spend/tokens read-only; quota/session-cookie flow is deferred.

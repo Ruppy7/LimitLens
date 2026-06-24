@@ -24,6 +24,7 @@ pub trait Host {
     fn claude_usage_json(&self) -> String;
     fn codex_usage_json(&self) -> String;
     fn deepseek_balance_json(&self) -> String;
+    fn opencode_usage_json(&self) -> String;
 }
 
 pub struct InfUsageHost;
@@ -43,6 +44,10 @@ impl Host for InfUsageHost {
 
     fn deepseek_balance_json(&self) -> String {
         r#"{"is_available":false,"balance_infos":[]}"#.to_string()
+    }
+
+    fn opencode_usage_json(&self) -> String {
+        r#"{"spend":null}"#.to_string()
     }
 }
 
@@ -144,6 +149,37 @@ function probe(ctx) {
 }
 "#;
 
+const OPENCODE_PROVIDER: &str = r#"
+function money(value) {
+  return `$${(value || 0).toFixed(2)}`;
+}
+
+function compact(count) {
+  if (count === null || count === undefined) return "0";
+  if (count >= 1e6) return `${(count / 1e6).toFixed(1)}M`;
+  if (count >= 1e3) return `${(count / 1e3).toFixed(1)}K`;
+  return String(count);
+}
+
+function probe(ctx) {
+  const data = JSON.parse(ctx.host.opencodeUsageJson());
+  const lines = [];
+
+  const spend = data.spend;
+  if (spend) {
+    lines.push({ label: "Last 7 days", value: money(spend.cost_7d) });
+    lines.push({ label: "Last 30 days", value: money(spend.cost_30d) });
+    lines.push({ label: "Tokens (30d)", value: compact(spend.tokens_30d) });
+    lines.push({ label: "All-time", value: money(spend.cost_all) });
+  }
+
+  return {
+    providerId: "opencode",
+    lines
+  };
+}
+"#;
+
 #[derive(Debug)]
 pub enum PluginRunError {
     Runtime(rquickjs::Error),
@@ -183,6 +219,10 @@ pub fn run_claude_provider(host: &impl Host) -> Result<ProviderSnapshot, PluginR
     run_provider(CLAUDE_PROVIDER, host)
 }
 
+pub fn run_opencode_provider(host: &impl Host) -> Result<ProviderSnapshot, PluginRunError> {
+    run_provider(OPENCODE_PROVIDER, host)
+}
+
 pub fn run_provider(source: &str, host: &impl Host) -> Result<ProviderSnapshot, PluginRunError> {
     let runtime = Runtime::new()?;
     runtime.set_memory_limit(PLUGIN_MEMORY_LIMIT_BYTES);
@@ -198,6 +238,7 @@ pub fn run_provider(source: &str, host: &impl Host) -> Result<ProviderSnapshot, 
     let claude_usage_json = host.claude_usage_json();
     let codex_usage_json = host.codex_usage_json();
     let deepseek_balance_json = host.deepseek_balance_json();
+    let opencode_usage_json = host.opencode_usage_json();
 
     context.with(|ctx| -> Result<ProviderSnapshot, PluginRunError> {
         let host = Object::new(ctx.clone())?;
@@ -213,6 +254,10 @@ pub fn run_provider(source: &str, host: &impl Host) -> Result<ProviderSnapshot, 
         host.set(
             "deepseekBalanceJson",
             Func::new(move || deepseek_balance_json.clone()),
+        )?;
+        host.set(
+            "opencodeUsageJson",
+            Func::new(move || opencode_usage_json.clone()),
         )?;
 
         let plugin_context = Object::new(ctx.clone())?;
@@ -261,10 +306,12 @@ pub fn run_provider(source: &str, host: &impl Host) -> Result<ProviderSnapshot, 
 mod tests {
     use super::*;
 
+    #[derive(Default)]
     struct FakeHost {
         claude_usage_json: String,
         codex_usage_json: String,
         deepseek_balance_json: String,
+        opencode_usage_json: String,
     }
 
     impl Host for FakeHost {
@@ -282,6 +329,10 @@ mod tests {
 
         fn deepseek_balance_json(&self) -> String {
             self.deepseek_balance_json.clone()
+        }
+
+        fn opencode_usage_json(&self) -> String {
+            self.opencode_usage_json.clone()
         }
     }
 
@@ -350,6 +401,7 @@ mod tests {
             }
             "#
             .to_string(),
+            opencode_usage_json: "{}".to_string(),
         };
 
         let snapshot = run_deepseek_provider(&host).expect("DeepSeek plugin should run");
@@ -382,6 +434,7 @@ mod tests {
             "#
             .to_string(),
             deepseek_balance_json: "{}".to_string(),
+            opencode_usage_json: "{}".to_string(),
         };
 
         let snapshot = run_codex_provider(&host).expect("Codex plugin should run");
@@ -427,6 +480,7 @@ mod tests {
             .to_string(),
             codex_usage_json: "{}".to_string(),
             deepseek_balance_json: "{}".to_string(),
+            opencode_usage_json: "{}".to_string(),
         };
 
         let snapshot = run_claude_provider(&host).expect("Claude plugin should run");
@@ -438,5 +492,48 @@ mod tests {
         assert!(snapshot.lines[1].value.starts_with("75% - "));
         assert_eq!(snapshot.lines[2].label, "Weekly remaining");
         assert!(snapshot.lines[2].value.starts_with("60% - "));
+    }
+
+    #[test]
+    fn opencode_provider_shows_spend_only_without_quota() {
+        let host = FakeHost {
+            opencode_usage_json: r#"
+            {
+              "spend": {
+                "cost_7d": 1.5, "cost_30d": 4.2, "cost_all": 8.08,
+                "tokens_30d": 1500000, "sessions_30d": 12
+              }
+            }
+            "#
+            .to_string(),
+            ..Default::default()
+        };
+
+        let snapshot = run_opencode_provider(&host).expect("OpenCode plugin should run");
+
+        assert_eq!(
+            snapshot,
+            ProviderSnapshot {
+                provider_id: "opencode".to_string(),
+                lines: vec![
+                    MetricLine {
+                        label: "Last 7 days".to_string(),
+                        value: "$1.50".to_string()
+                    },
+                    MetricLine {
+                        label: "Last 30 days".to_string(),
+                        value: "$4.20".to_string()
+                    },
+                    MetricLine {
+                        label: "Tokens (30d)".to_string(),
+                        value: "1.5M".to_string()
+                    },
+                    MetricLine {
+                        label: "All-time".to_string(),
+                        value: "$8.08".to_string()
+                    },
+                ],
+            }
+        );
     }
 }

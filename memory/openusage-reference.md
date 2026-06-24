@@ -31,8 +31,9 @@ Do not copy early:
 
 Important divergence:
 
-- Rob's OpenCode Go integration reads local OpenCode SQLite spend, which misses usage from other devices, keys, and workspace members.
-- InfUsage should use the user's discovered embedded-login workspace quota extraction instead.
+- Rob's OpenCode Go integration reads local OpenCode SQLite spend; InfUsage now uses that same read-only local spend path because it is zero-auth and enough for the current slice.
+- Do not treat OpenCode SQLite spend as subscription quota. It misses usage from other devices, keys, and workspace members.
+- If subscription-wide OpenCode quota comes back, prefer app-owned browser/session handling or an upstream read-only API, not pasted session cookies.
 
 Secondary reference: https://github.com/janekbaraniewski/openusage
 

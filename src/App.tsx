@@ -23,7 +23,7 @@ type DeepSeekKeySlot = {
   has_key: boolean;
 };
 
-const placeholders = ["OpenCode Go", "Antigravity"];
+const placeholders = ["Antigravity"];
 
 function App() {
   const [apiKey, setApiKey] = useState("");
@@ -32,6 +32,7 @@ function App() {
   const [claudeSnapshot, setClaudeSnapshot] = useState<ProviderSnapshot | null>(null);
   const [codexSnapshot, setCodexSnapshot] = useState<ProviderSnapshot | null>(null);
   const [deepseekSnapshot, setDeepseekSnapshot] = useState<ProviderSnapshot | null>(null);
+  const [opencodeSnapshot, setOpencodeSnapshot] = useState<ProviderSnapshot | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Record<string, number>>({});
   const [snapshotHistory, setSnapshotHistory] = useState<SavedSnapshot[]>([]);
   const [status, setStatus] = useState("Idle");
@@ -65,6 +66,8 @@ function App() {
             setCodexSnapshot(saved.snapshot);
           } else if (saved.provider_id === "deepseek") {
             setDeepseekSnapshot(saved.snapshot);
+          } else if (saved.provider_id === "opencode") {
+            setOpencodeSnapshot(saved.snapshot);
           }
         }
 
@@ -210,6 +213,20 @@ function App() {
     }
   }
 
+  async function refreshOpenCode() {
+    setError("");
+    setStatus("Refreshing");
+    try {
+      const nextSnapshot = await invoke<ProviderSnapshot>("refresh_opencode");
+      setOpencodeSnapshot(nextSnapshot);
+      markUpdated(nextSnapshot);
+      setStatus("Updated");
+    } catch (caught) {
+      setStatus("Error");
+      setError(String(caught));
+    }
+  }
+
   return (
     <main className="panel">
       <header className="panel-header">
@@ -331,6 +348,30 @@ function App() {
           ))}
           {deepseekSnapshot && <p className="updated-at">{updatedLabel("deepseek")}</p>}
           {renderHistory("deepseek")}
+        </div>
+
+        <div className="provider-block">
+          <div className="provider-row">
+            <span>OpenCode Go</span>
+            <span className={opencodeSnapshot ? "ok" : "muted"}>
+              {opencodeSnapshot ? "Updated" : "Local spend"}
+            </span>
+          </div>
+
+          <div className="deepseek-actions">
+            <button onClick={refreshOpenCode} type="button">
+              Refresh
+            </button>
+          </div>
+
+          {opencodeSnapshot?.lines.map((line) => (
+            <div className="metric-row" key={line.label}>
+              <span>{line.label}</span>
+              <strong>{line.value}</strong>
+            </div>
+          ))}
+          {opencodeSnapshot && <p className="updated-at">{updatedLabel("opencode")}</p>}
+          {renderHistory("opencode")}
         </div>
 
         {placeholders.map((provider) => (

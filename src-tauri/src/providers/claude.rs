@@ -206,13 +206,22 @@ fn load_auth() -> Result<ClaudeAuth, ClaudeError> {
 }
 
 fn auth_path() -> Option<PathBuf> {
-    if let Some(config_dir) = non_empty_env_path("CLAUDE_CONFIG_DIR") {
-        return Some(config_dir.join(".credentials.json"));
+    if let Some(path) = non_empty_env_path("CLAUDE_CREDENTIALS_FILE") {
+        return Some(path);
     }
 
-    non_empty_env_path("USERPROFILE")
-        .or_else(|| non_empty_env_path("HOME"))
-        .map(|home| home.join(".claude").join(".credentials.json"))
+    let mut candidates = Vec::new();
+
+    if let Some(config_dir) = non_empty_env_path("CLAUDE_CONFIG_DIR") {
+        candidates.push(config_dir.join(".credentials.json"));
+    }
+
+    if let Some(home) = non_empty_env_path("USERPROFILE").or_else(|| non_empty_env_path("HOME")) {
+        candidates.push(home.join(".claude").join(".credentials.json"));
+    }
+
+    candidates.extend(wsl_home_candidates(&[".claude", ".credentials.json"]));
+    candidates.into_iter().find(|path| path.exists())
 }
 
 fn non_empty_env_path(key: &str) -> Option<PathBuf> {
@@ -223,6 +232,29 @@ fn non_empty_env_path(key: &str) -> Option<PathBuf> {
             Some(Path::new(&value).to_path_buf())
         }
     })
+}
+
+fn wsl_home_candidates(parts: &[&str]) -> Vec<PathBuf> {
+    ["\\\\wsl.localhost", "\\\\wsl$"]
+        .into_iter()
+        .map(PathBuf::from)
+        .flat_map(|root| {
+            fs::read_dir(root)
+                .into_iter()
+                .flatten()
+                .filter_map(Result::ok)
+        })
+        .flat_map(|distro| {
+            let distro_path = distro.path();
+            let home_dirs = fs::read_dir(distro_path.join("home"))
+                .into_iter()
+                .flatten()
+                .filter_map(Result::ok)
+                .map(|entry| entry.path());
+            home_dirs.chain(std::iter::once(distro_path.join("root")))
+        })
+        .map(|home| parts.iter().fold(home, |path, part| path.join(part)))
+        .collect()
 }
 
 fn oauth_from_json(json: &Value) -> Result<ClaudeOauth, ClaudeError> {

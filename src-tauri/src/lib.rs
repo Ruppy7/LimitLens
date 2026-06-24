@@ -14,6 +14,7 @@ pub fn run() {
             let _ = plugin_host::run_deepseek_provider(&plugin_host::InfUsageHost);
             let _ = plugin_host::run_codex_provider(&plugin_host::InfUsageHost);
             let _ = plugin_host::run_claude_provider(&plugin_host::InfUsageHost);
+            let _ = plugin_host::run_opencode_provider(&plugin_host::InfUsageHost);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -25,6 +26,7 @@ pub fn run() {
             commands::list_deepseek_api_keys,
             commands::delete_deepseek_api_key,
             commands::refresh_deepseek,
+            commands::refresh_opencode,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
