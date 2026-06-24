@@ -19,7 +19,6 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_saved_snapshots,
-            commands::list_snapshot_history,
             commands::refresh_claude,
             commands::refresh_codex,
             commands::save_deepseek_api_key,

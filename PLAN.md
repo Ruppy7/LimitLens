@@ -30,7 +30,7 @@ Decision → Concept → Build → Checkpoint
 | D3 | Backend language | Rust · Go sidecar · Node sidecar | ✅ **Decided: Rust inside Tauri** | Use Tauri's native Rust host only. No Node/Go sidecar and no Rust web framework. Add crates only when forced by a feature: `serde` for real IPC payloads, `reqwest` for provider HTTP, SQLite crate at D6, and `thiserror` only if string errors become messy. |
 | D4 | Plugin runtime | QuickJS sandbox · WASM · native Rust modules · subprocess | ✅ **Decided: QuickJS via `rquickjs`** | Best learning/product fit for provider `.js` plugins with a controlled `ctx.host` API; the Windows build spike passed in Phase 2. |
 | D5 | State management | Zustand · Redux · Context · Jotai | Leaning: **Zustand** | Likely enough for small multi-window/shared UI state without Redux ceremony. |
-| D6 | Storage | JSON file · SQLite · sled | ✅ **Decided: JSON file for snapshots/history** | Ponytail first step: persist provider snapshots and a capped recent history with existing `serde_json` and no new database dependency. Revisit SQLite only when real history queries need it. |
+| D6 | Storage | JSON file · SQLite · sled | ✅ **Decided: JSON file for latest snapshots** | Ponytail first step: persist latest provider snapshots with existing `serde_json` and no new database dependency. Usage history UI was removed as clutter; revisit SQLite only when real history queries need it. |
 | D7 | Secret storage | Windows Credential Manager · encrypted file · OS keyring crate | ✅ **Decided: Windows Credential Manager via `keyring`** | Keeps provider keys out of plaintext files, React state after save, logs, and SQLite while using the native Windows credential store. |
 | D8 | OpenCode Go quota auth | Reuse local `auth.json` key · app-owned console session cookie · dev cookie paste | Dev-only: **cookie paste validation path** | Verified 2026-06-24: the local `~/.local/share/opencode/auth.json` `opencode-go` entry is a static `sk-…` **inference** key for `opencode.ai/zen/(go/)v1` only — usage/quota fields appear nowhere in the CLI binary. Usage quota is served by the console, GET `https://opencode.ai/workspace/{workspaceId}/go` (text/html, SolidStart/Seroval-serialized), authenticated by **session cookie**. Managed-webview login was prototyped but rejected because it forces a fresh in-app Google OAuth. Current implementation has a dev-only cookie paste path stored in Windows Credential Manager to validate quota parsing; long-term UX should still be app-owned session handling or upstream read-only API. |
 | D9 | OpenCode Go primary data | Console quota (cookie) · local SQLite spend | ✅ **Decided: local SQLite spend is primary** | Every other OpenCode tracker (openusage.sh, gaboe/opencode-usage, PyPI opencode-usage, robinebers/openusage) reads the local `opencode.db` with zero auth; none scrape console quota. Verified our `session` table exposes `cost` + `tokens_*` (ms timestamps) and `model` JSON with `providerID`. InfUsage reads `opencode.db` read-only for per-window spend/tokens, filtered to `providerID = "opencode-go"`, checking Windows `%LOCALAPPDATA%`, Unix/WSL `~/.local/share`, WSL `wslpath`, and an `OPENCODE_DB` override. Forces a SQLite reader → added `rusqlite` (bundled) per D3's "add crates only when a feature requires it." Caveat: local spend is this-device/this-machine, not subscription-wide; quota remains a later app-owned browser/session problem. |
@@ -145,12 +145,12 @@ Ponytail scope: prove the desktop shell first, then add tray behavior. No settin
 - [ ] OpenCode Go checkpoint: read local `opencode.db` spend/tokens read-only, including WSL paths, and validate subscription quota through the dev-only Credential Manager cookie path.
 - [ ] Antigravity checkpoint: start Antigravity or `agy`, then discover the local language server and call `GetUserStatus`.
 
-## Phase 4 — Storage and history
+## Phase 4 — Storage
 
 - [x] Persist latest provider snapshots to an app-data JSON file after successful refresh.
 - [x] Restore saved Codex, Claude, and DeepSeek snapshots on tray startup.
 - [x] Show a compact last-updated timestamp for restored/refreshed provider rows.
-- [x] Add basic capped recent history rows under each connected provider.
+- [x] Remove recent history rows from the tray popup; latest snapshot restore is enough for now.
 
 ## Phase 5 — More providers
 

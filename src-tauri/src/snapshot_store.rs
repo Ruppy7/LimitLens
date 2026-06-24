@@ -8,7 +8,6 @@ use std::{
 use tauri::Manager;
 
 const SNAPSHOTS_FILE: &str = "snapshots.json";
-const HISTORY_PER_PROVIDER: usize = 10;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SavedSnapshot {
@@ -20,7 +19,6 @@ pub struct SavedSnapshot {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct SnapshotFile {
     latest: Vec<SavedSnapshot>,
-    history: Vec<SavedSnapshot>,
 }
 
 #[derive(Deserialize)]
@@ -79,8 +77,6 @@ pub fn save_latest(
     };
 
     upsert_latest(&mut file.latest, saved.clone());
-    file.history.insert(0, saved.clone());
-    trim_history(&mut file.history);
 
     write_file(app, &file)?;
     Ok(saved)
@@ -88,10 +84,6 @@ pub fn save_latest(
 
 pub fn load_all(app: &tauri::AppHandle) -> Result<Vec<SavedSnapshot>, SnapshotStoreError> {
     Ok(load_file(app)?.latest)
-}
-
-pub fn load_history(app: &tauri::AppHandle) -> Result<Vec<SavedSnapshot>, SnapshotStoreError> {
-    Ok(load_file(app)?.history)
 }
 
 fn load_file(app: &tauri::AppHandle) -> Result<SnapshotFile, SnapshotStoreError> {
@@ -103,10 +95,7 @@ fn load_file(app: &tauri::AppHandle) -> Result<SnapshotFile, SnapshotStoreError>
 
     match serde_json::from_slice(&fs::read(path)?)? {
         SnapshotDiskFormat::Current(file) => Ok(file),
-        SnapshotDiskFormat::Legacy(latest) => Ok(SnapshotFile {
-            latest,
-            history: Vec::new(),
-        }),
+        SnapshotDiskFormat::Legacy(latest) => Ok(SnapshotFile { latest }),
     }
 }
 
@@ -134,16 +123,6 @@ fn upsert_latest(snapshots: &mut Vec<SavedSnapshot>, saved: SavedSnapshot) {
     } else {
         snapshots.push(saved);
     }
-}
-
-fn trim_history(history: &mut Vec<SavedSnapshot>) {
-    let mut seen = std::collections::HashMap::<String, usize>::new();
-
-    history.retain(|saved| {
-        let count = seen.entry(saved.provider_id.clone()).or_default();
-        *count += 1;
-        *count <= HISTORY_PER_PROVIDER
-    });
 }
 
 fn now_seconds() -> u64 {
@@ -188,25 +167,5 @@ mod tests {
         assert_eq!(snapshots.len(), 1);
         assert_eq!(snapshots[0].captured_at, 2);
         assert_eq!(snapshots[0].snapshot.lines[0].label, "New");
-    }
-
-    #[test]
-    fn history_keeps_latest_ten_per_provider() {
-        let mut history = (0..12)
-            .map(|captured_at| SavedSnapshot {
-                provider_id: "codex".to_string(),
-                captured_at,
-                snapshot: ProviderSnapshot {
-                    provider_id: "codex".to_string(),
-                    lines: Vec::new(),
-                },
-            })
-            .collect::<Vec<_>>();
-
-        trim_history(&mut history);
-
-        assert_eq!(history.len(), 10);
-        assert_eq!(history[0].captured_at, 0);
-        assert_eq!(history[9].captured_at, 9);
     }
 }

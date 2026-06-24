@@ -21,7 +21,7 @@ Current decided stack:
 - D3 backend: Rust inside Tauri; no sidecar/framework.
 - D4 plugin runtime: QuickJS via `rquickjs`.
 - D7 secret storage: Windows Credential Manager via `keyring`.
-- D6 storage: JSON file for latest snapshots plus capped recent history; defer SQLite until real query needs exist.
+- D6 storage: JSON file for latest snapshots only; usage history UI was removed as clutter and SQLite stays deferred until real query needs exist.
 - D8 OpenCode quota auth: dev-only cookie paste path stores workspace id + cookie in Windows Credential Manager; local `auth.json` key is inference-only, final quota UX should become app-owned browser/session if kept.
 - D9 OpenCode primary data: local read-only `opencode.db` spend/tokens, with Windows, Unix/WSL, `wsl.exe --cd ~ wslpath -w ...`, and `OPENCODE_DB` path discovery.
 - Scaffold: official `create-tauri-app` template with npm.

@@ -196,11 +196,6 @@ pub fn list_saved_snapshots(app: tauri::AppHandle) -> Result<Vec<SavedSnapshot>,
 }
 
 #[tauri::command]
-pub fn list_snapshot_history(app: tauri::AppHandle) -> Result<Vec<SavedSnapshot>, String> {
-    snapshot_store::load_history(&app).map_err(|error| error.to_string())
-}
-
-#[tauri::command]
 pub fn opencode_quota_session_status() -> bool {
     secrets::has_opencode_quota_session()
 }

@@ -24,6 +24,8 @@ type DeepSeekKeySlot = {
 };
 
 const placeholders = ["Antigravity"];
+type OpenCodeView = "spend" | "quota";
+const opencodeSpendLabels = new Set(["Last 7 days", "Last 30 days", "Tokens (30d)", "All-time"]);
 
 function App() {
   const [apiKey, setApiKey] = useState("");
@@ -37,8 +39,8 @@ function App() {
   const [showOpencodeQuotaSetup, setShowOpencodeQuotaSetup] = useState(false);
   const [opencodeCookie, setOpencodeCookie] = useState("");
   const [opencodeWorkspace, setOpencodeWorkspace] = useState("");
+  const [opencodeView, setOpencodeView] = useState<OpenCodeView>("spend");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Record<string, number>>({});
-  const [snapshotHistory, setSnapshotHistory] = useState<SavedSnapshot[]>([]);
   const [status, setStatus] = useState("Idle");
   const [error, setError] = useState("");
 
@@ -79,10 +81,6 @@ function App() {
       })
       .catch(() => {});
 
-    invoke<SavedSnapshot[]>("list_snapshot_history")
-      .then(setSnapshotHistory)
-      .catch(() => {});
-
     invoke<boolean>("opencode_quota_session_status")
       .then(setOpencodeQuotaConnected)
       .catch(() => setOpencodeQuotaConnected(false));
@@ -93,12 +91,6 @@ function App() {
       ...current,
       [snapshot.provider_id]: capturedAt,
     }));
-    setSnapshotHistory((current) =>
-      [{ provider_id: snapshot.provider_id, captured_at: capturedAt, snapshot }, ...current]
-        .filter((saved) => saved.provider_id === snapshot.provider_id)
-        .slice(0, 10)
-        .concat(current.filter((saved) => saved.provider_id !== snapshot.provider_id)),
-    );
   }
 
   function updatedLabel(providerId: string) {
@@ -114,39 +106,6 @@ function App() {
     return `Updated ${pad(date.getDate())}-${pad(date.getMonth() + 1)} ${pad(
       date.getHours(),
     )}:${pad(date.getMinutes())}`;
-  }
-
-  function shortDate(capturedAt: number) {
-    const date = new Date(capturedAt * 1000);
-    const pad = (value: number) => String(value).padStart(2, "0");
-
-    return `${pad(date.getDate())}-${pad(date.getMonth() + 1)} ${pad(
-      date.getHours(),
-    )}:${pad(date.getMinutes())}`;
-  }
-
-  function providerHistory(providerId: string) {
-    return snapshotHistory.filter((saved) => saved.provider_id === providerId);
-  }
-
-  function renderHistory(providerId: string) {
-    const history = providerHistory(providerId);
-
-    if (history.length === 0) {
-      return null;
-    }
-
-    return (
-      <details className="history">
-        <summary>Recent</summary>
-        {history.map((saved, index) => (
-          <div className="history-row" key={`${saved.provider_id}-${saved.captured_at}-${index}`}>
-            <span>{shortDate(saved.captured_at)}</span>
-            <strong>{saved.snapshot.lines[0]?.value || "Updated"}</strong>
-          </div>
-        ))}
-      </details>
-    );
   }
 
   async function saveKey() {
@@ -247,6 +206,7 @@ function App() {
       setOpencodeWorkspace("");
       setShowOpencodeQuotaSetup(false);
       setOpencodeQuotaConnected(true);
+      setOpencodeView("quota");
       setOpencodeSnapshot(nextSnapshot);
       markUpdated(nextSnapshot);
       setStatus("Updated");
@@ -262,6 +222,7 @@ function App() {
     try {
       const connected = await invoke<boolean>("disconnect_opencode_quota");
       setOpencodeQuotaConnected(connected);
+      setOpencodeView("spend");
       setShowOpencodeQuotaSetup(false);
       setStatus("Disconnected");
       await refreshOpenCode();
@@ -303,7 +264,6 @@ function App() {
             </div>
           ))}
           {codexSnapshot && <p className="updated-at">{updatedLabel("codex")}</p>}
-          {renderHistory("codex")}
         </div>
 
         <div className="provider-block">
@@ -327,7 +287,6 @@ function App() {
             </div>
           ))}
           {claudeSnapshot && <p className="updated-at">{updatedLabel("claude")}</p>}
-          {renderHistory("claude")}
         </div>
 
         <div className="provider-block">
@@ -391,14 +350,19 @@ function App() {
             </div>
           ))}
           {deepseekSnapshot && <p className="updated-at">{updatedLabel("deepseek")}</p>}
-          {renderHistory("deepseek")}
         </div>
 
         <div className="provider-block">
           <div className="provider-row">
             <span>OpenCode Go</span>
             <span className={opencodeSnapshot ? "ok" : "muted"}>
-              {opencodeQuotaConnected ? "Spend + quota" : opencodeSnapshot ? "Updated" : "Local spend"}
+              {opencodeQuotaConnected
+                ? opencodeView === "quota"
+                  ? "Quota"
+                  : "Spend"
+                : opencodeSnapshot
+                  ? "Updated"
+                  : "Local spend"}
             </span>
           </div>
 
@@ -406,6 +370,24 @@ function App() {
             <button onClick={refreshOpenCode} type="button">
               Refresh
             </button>
+            {opencodeQuotaConnected && (
+              <>
+                <button
+                  disabled={opencodeView === "spend"}
+                  onClick={() => setOpencodeView("spend")}
+                  type="button"
+                >
+                  Spend
+                </button>
+                <button
+                  disabled={opencodeView === "quota"}
+                  onClick={() => setOpencodeView("quota")}
+                  type="button"
+                >
+                  Quota
+                </button>
+              </>
+            )}
             {opencodeQuotaConnected ? (
               <button onClick={disconnectOpenCodeQuota} type="button">
                 Disconnect quota
@@ -443,14 +425,19 @@ function App() {
             </div>
           )}
 
-          {opencodeSnapshot?.lines.map((line) => (
-            <div className="metric-row" key={line.label}>
-              <span>{line.label}</span>
-              <strong>{line.value}</strong>
-            </div>
-          ))}
+          {opencodeSnapshot?.lines
+            .filter((line) =>
+              opencodeView === "spend"
+                ? opencodeSpendLabels.has(line.label)
+                : !opencodeSpendLabels.has(line.label),
+            )
+            .map((line) => (
+              <div className="metric-row" key={line.label}>
+                <span>{line.label}</span>
+                <strong>{line.value}</strong>
+              </div>
+            ))}
           {opencodeSnapshot && <p className="updated-at">{updatedLabel("opencode")}</p>}
-          {renderHistory("opencode")}
         </div>
 
         {placeholders.map((provider) => (
