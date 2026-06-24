@@ -26,6 +26,7 @@ pub enum OpenCodeDbError {
     Db(rusqlite::Error),
     Json(serde_json::Error),
     NotFound,
+    Wsl(String),
 }
 
 impl From<rusqlite::Error> for OpenCodeDbError {
@@ -49,6 +50,7 @@ impl std::fmt::Display for OpenCodeDbError {
                 formatter,
                 "OpenCode database not found; run OpenCode first or set OPENCODE_DB"
             ),
+            Self::Wsl(error) => write!(formatter, "OpenCode WSL database error: {error}"),
         }
     }
 }
@@ -61,11 +63,48 @@ pub fn read_spend_summary_json() -> Result<String, OpenCodeDbError> {
         return Err(OpenCodeDbError::NotFound);
     }
 
+    if is_wsl_path(&path) {
+        let summary = summarize_wsl(now_ms())?;
+        return Ok(serde_json::to_string(&summary)?);
+    }
+
     // Read-only so we never disturb a running OpenCode; SQLite readers do not
     // block writers in WAL mode.
     let connection = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     let summary = summarize(&connection, now_ms())?;
     Ok(serde_json::to_string(&summary)?)
+}
+
+fn summarize_wsl(now_ms: i64) -> Result<SpendSummary, OpenCodeDbError> {
+    let cutoff_7d = now_ms - 7 * DAY_MS;
+    let cutoff_30d = now_ms - 30 * DAY_MS;
+    let sql = aggregate_sql(&cutoff_7d.to_string(), &cutoff_30d.to_string());
+
+    let output = Command::new("wsl.exe")
+        .args([
+            "--cd",
+            "~",
+            "sqlite3",
+            "-readonly",
+            "-batch",
+            "-separator",
+            "\t",
+            ".local/share/opencode/opencode.db",
+            &sql,
+        ])
+        .output()
+        .map_err(|error| OpenCodeDbError::Wsl(error.to_string()))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(OpenCodeDbError::Wsl(if stderr.is_empty() {
+            "sqlite3 failed inside WSL".to_string()
+        } else {
+            stderr
+        }));
+    }
+
+    parse_summary_row(String::from_utf8_lossy(&output.stdout).trim())
 }
 
 /// Aggregate spend/tokens from the `session` table relative to `now_ms`. Times
@@ -75,25 +114,54 @@ fn summarize(connection: &Connection, now_ms: i64) -> Result<SpendSummary, rusql
     let cutoff_7d = now_ms - 7 * DAY_MS;
     let cutoff_30d = now_ms - 30 * DAY_MS;
 
-    connection.query_row(
+    connection.query_row(&aggregate_sql("?1", "?2"), [cutoff_7d, cutoff_30d], |row| {
+        Ok(SpendSummary {
+            cost_7d: row.get(0)?,
+            cost_30d: row.get(1)?,
+            cost_all: row.get(2)?,
+            tokens_30d: row.get(3)?,
+            sessions_30d: row.get(4)?,
+        })
+    })
+}
+
+fn aggregate_sql(cutoff_7d: &str, cutoff_30d: &str) -> String {
+    format!(
         "SELECT \
-            COALESCE(SUM(CASE WHEN COALESCE(time_updated, time_created) >= ?1 THEN COALESCE(cost, 0) END), 0.0), \
-            COALESCE(SUM(CASE WHEN COALESCE(time_updated, time_created) >= ?2 THEN COALESCE(cost, 0) END), 0.0), \
+            COALESCE(SUM(CASE WHEN COALESCE(time_updated, time_created) >= {cutoff_7d} THEN COALESCE(cost, 0) END), 0.0), \
+            COALESCE(SUM(CASE WHEN COALESCE(time_updated, time_created) >= {cutoff_30d} THEN COALESCE(cost, 0) END), 0.0), \
             COALESCE(SUM(COALESCE(cost, 0)), 0.0), \
-            COALESCE(SUM(CASE WHEN COALESCE(time_updated, time_created) >= ?2 THEN COALESCE(tokens_input, 0) + COALESCE(tokens_output, 0) END), 0), \
-            COALESCE(SUM(CASE WHEN COALESCE(time_updated, time_created) >= ?2 THEN 1 END), 0) \
-         FROM session",
-        [cutoff_7d, cutoff_30d],
-        |row| {
-            Ok(SpendSummary {
-                cost_7d: row.get(0)?,
-                cost_30d: row.get(1)?,
-                cost_all: row.get(2)?,
-                tokens_30d: row.get(3)?,
-                sessions_30d: row.get(4)?,
-            })
-        },
+            COALESCE(SUM(CASE WHEN COALESCE(time_updated, time_created) >= {cutoff_30d} THEN COALESCE(tokens_input, 0) + COALESCE(tokens_output, 0) END), 0), \
+            COALESCE(SUM(CASE WHEN COALESCE(time_updated, time_created) >= {cutoff_30d} THEN 1 END), 0) \
+         FROM session"
     )
+}
+
+fn parse_summary_row(row: &str) -> Result<SpendSummary, OpenCodeDbError> {
+    let parts = row.split('\t').collect::<Vec<_>>();
+    if parts.len() != 5 {
+        return Err(OpenCodeDbError::Wsl(
+            "sqlite3 returned an unexpected summary row".to_string(),
+        ));
+    }
+
+    Ok(SpendSummary {
+        cost_7d: parts[0]
+            .parse()
+            .map_err(|_| OpenCodeDbError::Wsl("invalid 7-day cost".to_string()))?,
+        cost_30d: parts[1]
+            .parse()
+            .map_err(|_| OpenCodeDbError::Wsl("invalid 30-day cost".to_string()))?,
+        cost_all: parts[2]
+            .parse()
+            .map_err(|_| OpenCodeDbError::Wsl("invalid all-time cost".to_string()))?,
+        tokens_30d: parts[3]
+            .parse()
+            .map_err(|_| OpenCodeDbError::Wsl("invalid 30-day token total".to_string()))?,
+        sessions_30d: parts[4]
+            .parse()
+            .map_err(|_| OpenCodeDbError::Wsl("invalid 30-day session count".to_string()))?,
+    })
 }
 
 fn now_ms() -> i64 {
@@ -146,6 +214,10 @@ fn env_path(key: &str) -> Option<PathBuf> {
             Some(Path::new(&value).to_path_buf())
         }
     })
+}
+
+fn is_wsl_path(path: &Path) -> bool {
+    path.to_string_lossy().starts_with(r"\\wsl")
 }
 
 fn wsl_home_candidates(parts: &[&str]) -> Vec<PathBuf> {
@@ -252,6 +324,20 @@ mod tests {
         assert_eq!(
             summarize(&connection, DAY_MS).unwrap(),
             SpendSummary::default()
+        );
+    }
+
+    #[test]
+    fn parses_wsl_sqlite_summary_row() {
+        assert_eq!(
+            parse_summary_row("1.5\t4.2\t8.08\t1500000\t12").unwrap(),
+            SpendSummary {
+                cost_7d: 1.5,
+                cost_30d: 4.2,
+                cost_all: 8.08,
+                tokens_30d: 1_500_000,
+                sessions_30d: 12,
+            }
         );
     }
 }
