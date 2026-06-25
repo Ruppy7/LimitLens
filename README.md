@@ -30,13 +30,7 @@ cd src-tauri
 cargo test
 ```
 
-Build a local desktop package:
-
-```powershell
-npm run tauri -- build
-```
-
-Official signed installers are not published yet.
+InfUsage does not publish binaries or installers yet. Use the source workflow above until release packaging is ready.
 
 ## OpenCode Go
 
@@ -61,13 +55,13 @@ A safer local fallback exists in `src-tauri/src/providers/opencode_db.rs`, but i
 - Windows is the primary target.
 - Provider usage endpoints can change without notice.
 - OpenCode Go support is experimental.
-- The app is unsigned.
+- No official binaries or signed installers are published yet.
 - Provider logos and names belong to their respective owners.
 
 ## Planned
 
 - Final app icon and branding.
-- Public release packaging.
+- Public release packaging and signing.
 - Better provider setup flows.
 - Antigravity support if a stable local or authenticated usage source is available.
 
