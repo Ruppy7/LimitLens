@@ -1,0 +1,12 @@
+# Normalize all text files to LF in the repository.
+# Prevents CRLF noise from Windows editors (e.g. VS Code on /mnt/c).
+* text=auto eol=lf
+
+# Binary files git already detects, but be explicit for common ones.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
