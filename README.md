@@ -13,7 +13,7 @@ It is built with Tauri, React, TypeScript, and Rust. Provider credentials and se
 
 ## Download
 
-LimitLens publishes Windows builds through [GitHub Releases](https://github.com/Ruppy7/InfUsage/releases).
+LimitLens publishes Windows builds through [GitHub Releases](https://github.com/Ruppy7/LimitLens/releases).
 
 - Unsigned NSIS installer: `LimitLens_<version>_x64-setup.exe`
 - Portable zip: `LimitLens_<version>_x64-portable.zip`
@@ -26,8 +26,8 @@ The Windows builds are unsigned for now, so Windows may show SmartScreen or unkn
 Clone the repo, install dependencies, and run it locally:
 
 ```powershell
-git clone https://github.com/Ruppy7/InfUsage.git
-cd InfUsage
+git clone https://github.com/Ruppy7/LimitLens.git
+cd LimitLens
 npm install
 npm run tauri dev
 ```

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-// Keep the legacy service name so existing pre-release Credential Manager entries still work.
-const SERVICE: &str = "InfUsage";
+const SERVICE: &str = "LimitLens";
+const LEGACY_SERVICE: &str = "InfUsage";
 const DEEPSEEK_USER: &str = "deepseek-api-key";
 const OPENCODE_QUOTA_SESSION_USER: &str = "opencode-quota-session";
 pub const MAX_DEEPSEEK_KEYS: u8 = 1;
@@ -25,16 +25,12 @@ pub fn save_opencode_quota_session(session: &OpenCodeQuotaSession) -> Result<(),
 }
 
 pub fn load_opencode_quota_session() -> Option<OpenCodeQuotaSession> {
-    let json = opencode_quota_session_entry().ok()?.get_password().ok()?;
+    let json = load_secret(OPENCODE_QUOTA_SESSION_USER).ok()?;
     serde_json::from_str(&json).ok()
 }
 
 pub fn delete_opencode_quota_session() -> Result<(), keyring::Error> {
-    match opencode_quota_session_entry()?.delete_credential() {
-        Ok(()) => Ok(()),
-        Err(keyring::Error::NoEntry) => Ok(()),
-        Err(error) => Err(error),
-    }
+    delete_secret(OPENCODE_QUOTA_SESSION_USER)
 }
 
 pub fn has_opencode_quota_session() -> bool {
@@ -54,11 +50,7 @@ pub fn delete_deepseek_api_key(slot: u8) -> Result<(), keyring::Error> {
     if slot != 1 {
         return Err(keyring::Error::NoEntry);
     }
-    match deepseek_entry()?.delete_credential() {
-        Ok(()) => Ok(()),
-        Err(keyring::Error::NoEntry) => Ok(()),
-        Err(error) => Err(error),
-    }
+    delete_secret(DEEPSEEK_USER)
 }
 
 pub fn list_deepseek_key_slots() -> Vec<DeepSeekKeySlot> {
@@ -76,9 +68,34 @@ pub fn load_deepseek_api_keys() -> Vec<(u8, String)> {
 }
 
 fn load_deepseek_api_key() -> Result<String, keyring::Error> {
-    deepseek_entry()?.get_password()
+    load_secret(DEEPSEEK_USER)
 }
 
 fn deepseek_entry() -> Result<keyring::Entry, keyring::Error> {
     keyring::Entry::new(SERVICE, DEEPSEEK_USER)
+}
+
+fn load_secret(user: &str) -> Result<String, keyring::Error> {
+    match keyring::Entry::new(SERVICE, user)?.get_password() {
+        Ok(secret) => Ok(secret),
+        Err(keyring::Error::NoEntry) => {
+            let legacy = keyring::Entry::new(LEGACY_SERVICE, user)?.get_password()?;
+            keyring::Entry::new(SERVICE, user)?.set_password(&legacy)?;
+            Ok(legacy)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn delete_secret(user: &str) -> Result<(), keyring::Error> {
+    delete_entry(SERVICE, user)?;
+    delete_entry(LEGACY_SERVICE, user)
+}
+
+fn delete_entry(service: &str, user: &str) -> Result<(), keyring::Error> {
+    match keyring::Entry::new(service, user)?.delete_credential() {
+        Ok(()) => Ok(()),
+        Err(keyring::Error::NoEntry) => Ok(()),
+        Err(error) => Err(error),
+    }
 }
