@@ -78,8 +78,7 @@ If you normally use Claude Code inside WSL, sign in once from Windows Claude Cod
 
 ## Planned
 
-- Final app icon and branding.
-- Public release packaging and signing.
+- Signed release packaging.
 - Better provider setup flows.
 - Antigravity support if a stable local or authenticated usage source is available.
 
