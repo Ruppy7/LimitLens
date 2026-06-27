@@ -19,8 +19,6 @@
 
 It is built with Tauri, React, TypeScript, and Rust. Provider credentials and session data are kept in Windows Credential Manager where possible, and the UI shows only sanitized usage summaries.
 
-## Screenshots
-
 <p align="center">
   <img src="assets/screenshots/dashboard.png" alt="LimitLens dashboard showing provider usage cards" width="460">
 </p>
