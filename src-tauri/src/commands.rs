@@ -286,6 +286,9 @@ fn provider_error(provider: &str, error: &impl std::fmt::Display) -> String {
     if message.contains("expired") || message.contains("sign in") {
         return message;
     }
+    if message.contains("rate limited") {
+        return message;
+    }
     if message.contains("not found")
         || message.contains("not saved")
         || message.contains("not connected")

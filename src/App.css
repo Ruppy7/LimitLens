@@ -680,11 +680,15 @@ input:focus-visible,
 }
 
 /* The accent bar is the only saturated color on the card: your usage. */
-.metric-progress span {
+.metric-progress svg {
   display: block;
+  width: 100%;
   height: 100%;
+}
+
+.metric-progress rect {
   border-radius: inherit;
-  background: var(--accent);
+  fill: var(--accent);
   transition: width 340ms ease;
 }
 

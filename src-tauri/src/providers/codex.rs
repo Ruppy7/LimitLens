@@ -46,6 +46,7 @@ pub enum CodexError {
     Json(serde_json::Error),
     MissingAuth,
     MissingTokens,
+    RateLimited,
     Unauthorized,
 }
 
@@ -77,6 +78,7 @@ impl std::fmt::Display for CodexError {
             Self::MissingTokens => {
                 write!(formatter, "Codex auth.json does not contain login tokens")
             }
+            Self::RateLimited => write!(formatter, "Codex is rate limited; try again later"),
             Self::Unauthorized => {
                 write!(formatter, "Codex login expired; run Codex again to sign in")
             }
@@ -124,6 +126,9 @@ fn fetch_usage_summary(client: &Client, tokens: &CodexTokens) -> Result<FetchRes
     if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
         return Ok(FetchResult::Unauthorized);
     }
+    if status == StatusCode::TOO_MANY_REQUESTS {
+        return Err(CodexError::RateLimited);
+    }
 
     let headers = response.headers().clone();
     let body = response.error_for_status()?.json::<Value>()?;
@@ -152,6 +157,9 @@ fn refresh_auth(client: &Client, auth: &mut CodexAuth) -> Result<(), CodexError>
         StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
     ) {
         return Err(CodexError::Unauthorized);
+    }
+    if response.status() == StatusCode::TOO_MANY_REQUESTS {
+        return Err(CodexError::RateLimited);
     }
 
     let refreshed = response.error_for_status()?.json::<Value>()?;
