@@ -22,6 +22,7 @@ pub struct BalanceInfo {
 pub enum DeepSeekError {
     Http(reqwest::Error),
     Json(serde_json::Error),
+    RateLimited,
 }
 
 impl From<reqwest::Error> for DeepSeekError {
@@ -41,6 +42,7 @@ impl std::fmt::Display for DeepSeekError {
         match self {
             Self::Http(_) => write!(formatter, "DeepSeek network request failed"),
             Self::Json(_) => write!(formatter, "DeepSeek data could not be parsed"),
+            Self::RateLimited => write!(formatter, "DeepSeek is rate limited; try again later"),
         }
     }
 }
@@ -52,9 +54,13 @@ pub fn fetch_balance_json(api_key: &str) -> Result<String, DeepSeekError> {
         .get(BALANCE_URL)
         .bearer_auth(api_key)
         .timeout(REQUEST_TIMEOUT)
-        .send()?
-        .error_for_status()?
-        .json::<BalanceResponse>()?;
+        .send()?;
+
+    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err(DeepSeekError::RateLimited);
+    }
+
+    let response = response.error_for_status()?.json::<BalanceResponse>()?;
 
     Ok(serde_json::to_string(&response)?)
 }

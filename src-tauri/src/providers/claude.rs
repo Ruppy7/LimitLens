@@ -53,6 +53,7 @@ pub enum ClaudeError {
     Json(serde_json::Error),
     MissingAuth,
     MissingTokens,
+    RateLimited,
     Unauthorized,
 }
 
@@ -88,6 +89,7 @@ impl std::fmt::Display for ClaudeError {
                 formatter,
                 "Claude credentials do not contain Claude Code OAuth tokens"
             ),
+            Self::RateLimited => write!(formatter, "Claude is rate limited; try again later"),
             Self::Unauthorized => write!(formatter, "Claude login expired; run claude to sign in"),
         }
     }
@@ -156,6 +158,9 @@ fn fetch_usage_summary(
     if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
         return Ok(FetchResult::Unauthorized);
     }
+    if status == StatusCode::TOO_MANY_REQUESTS {
+        return Err(ClaudeError::RateLimited);
+    }
 
     let body = response.error_for_status()?.json::<Value>()?;
 
@@ -177,6 +182,9 @@ fn fetch_profile_plan(client: &Client, oauth: &ClaudeOauth) -> Result<Option<Str
         StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
     ) {
         return Ok(None);
+    }
+    if response.status() == StatusCode::TOO_MANY_REQUESTS {
+        return Err(ClaudeError::RateLimited);
     }
 
     let body = response.error_for_status()?.json::<Value>()?;
@@ -206,6 +214,9 @@ fn refresh_auth(client: &Client, auth: &mut ClaudeAuth) -> Result<(), ClaudeErro
         StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN | StatusCode::BAD_REQUEST
     ) {
         return Err(ClaudeError::Unauthorized);
+    }
+    if response.status() == StatusCode::TOO_MANY_REQUESTS {
+        return Err(ClaudeError::RateLimited);
     }
 
     let refreshed = response.error_for_status()?.json::<Value>()?;

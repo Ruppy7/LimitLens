@@ -761,6 +761,7 @@ function ProviderCard({
 
 function MetricRow({ line }: { line: MetricLine }) {
   const metric = metricParts(line);
+  const percent = metric.percent === null ? null : Math.max(0, Math.min(100, metric.percent));
   return (
     <div className="metric-row">
       <div className="metric-copy">
@@ -770,16 +771,18 @@ function MetricRow({ line }: { line: MetricLine }) {
         </div>
         {metric.percentText ? <strong>{metric.percentText}</strong> : <strong>{metric.value}</strong>}
       </div>
-      {metric.percent !== null && (
+      {percent !== null && (
         <div
           aria-label={metric.label}
           aria-valuemax={100}
           aria-valuemin={0}
-          aria-valuenow={Math.round(metric.percent)}
+          aria-valuenow={Math.round(percent)}
           className="metric-progress"
           role="progressbar"
         >
-          <span aria-hidden="true" style={{ width: `${metric.percent}%` }} />
+          <svg aria-hidden="true" focusable="false" preserveAspectRatio="none" viewBox="0 0 100 8">
+            <rect height="8" rx="4" width={percent} x="0" y="0" />
+          </svg>
         </div>
       )}
     </div>

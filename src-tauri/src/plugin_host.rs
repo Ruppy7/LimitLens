@@ -7,6 +7,22 @@ const PLUGIN_MEMORY_LIMIT_BYTES: usize = 4 * 1024 * 1024;
 const PLUGIN_STACK_LIMIT_BYTES: usize = 256 * 1024;
 const MAX_LINES: usize = 16;
 const MAX_METRIC_TEXT_CHARS: usize = 256;
+const RESET_HELPERS: &str = r#"
+function resetDuration(seconds) {
+  seconds = Math.max(0, Math.floor(seconds));
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+function resetFromDate(value) {
+  const date = typeof value === "number" ? new Date(value * 1000) : new Date(value);
+  return resetDuration((date.getTime() - Date.now()) / 1000);
+}
+"#;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ProviderSnapshot {
@@ -64,17 +80,6 @@ function probe(ctx) {
 "#;
 
 const CODEX_PROVIDER: &str = r#"
-function resetText(value) {
-  const date = typeof value === "number" ? new Date(value * 1000) : new Date(value);
-  const seconds = Math.max(0, Math.floor((date.getTime() - Date.now()) / 1000));
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
-}
-
 function probe(ctx) {
   const usage = JSON.parse(ctx.host.codexUsageJson());
   const lines = [];
@@ -84,12 +89,12 @@ function probe(ctx) {
   }
 
   if (usage.session_remaining_percent !== null && usage.session_remaining_percent !== undefined) {
-    const reset = usage.session_reset_at ? ` - Resets in ${resetText(usage.session_reset_at)}` : "";
+    const reset = usage.session_reset_at ? ` - Resets in ${resetFromDate(usage.session_reset_at)}` : "";
     lines.push({ label: "Session", value: `${usage.session_remaining_percent}%${reset}` });
   }
 
   if (usage.weekly_remaining_percent !== null && usage.weekly_remaining_percent !== undefined) {
-    const reset = usage.weekly_reset_at ? ` - Resets in ${resetText(usage.weekly_reset_at)}` : "";
+    const reset = usage.weekly_reset_at ? ` - Resets in ${resetFromDate(usage.weekly_reset_at)}` : "";
     lines.push({ label: "Weekly", value: `${usage.weekly_remaining_percent}%${reset}` });
   }
 
@@ -105,17 +110,6 @@ function probe(ctx) {
 "#;
 
 const CLAUDE_PROVIDER: &str = r#"
-function resetText(value) {
-  const date = typeof value === "number" ? new Date(value * 1000) : new Date(value);
-  const seconds = Math.max(0, Math.floor((date.getTime() - Date.now()) / 1000));
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
-}
-
 function probe(ctx) {
   const usage = JSON.parse(ctx.host.claudeUsageJson());
   const lines = [];
@@ -125,12 +119,12 @@ function probe(ctx) {
   }
 
   if (usage.session_remaining_percent !== null && usage.session_remaining_percent !== undefined) {
-    const reset = usage.session_reset_at ? ` - Resets in ${resetText(usage.session_reset_at)}` : "";
+    const reset = usage.session_reset_at ? ` - Resets in ${resetFromDate(usage.session_reset_at)}` : "";
     lines.push({ label: "Session", value: `${usage.session_remaining_percent}%${reset}` });
   }
 
   if (usage.weekly_remaining_percent !== null && usage.weekly_remaining_percent !== undefined) {
-    const reset = usage.weekly_reset_at ? ` - Resets in ${resetText(usage.weekly_reset_at)}` : "";
+    const reset = usage.weekly_reset_at ? ` - Resets in ${resetFromDate(usage.weekly_reset_at)}` : "";
     lines.push({ label: "Weekly", value: `${usage.weekly_remaining_percent}%${reset}` });
   }
 
@@ -142,16 +136,6 @@ function probe(ctx) {
 "#;
 
 const OPENCODE_PROVIDER: &str = r#"
-function resetText(seconds) {
-  if (seconds === null || seconds === undefined) return "";
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
-}
-
 function quotaLine(label, window) {
   if (!window) return null;
   const used =
@@ -159,7 +143,7 @@ function quotaLine(label, window) {
       ? `${window.usage_percent}% used`
       : (window.status || "n/a");
   const reset = window.reset_in_sec !== null && window.reset_in_sec !== undefined
-    ? ` - Resets in ${resetText(window.reset_in_sec)}`
+    ? ` - Resets in ${resetDuration(window.reset_in_sec)}`
     : "";
   return { label, value: `${used}${reset}` };
 }
@@ -324,6 +308,7 @@ fn run_provider_with_capabilities(
         plugin_context.set("host", host)?;
         ctx.globals().set("ctx", plugin_context)?;
 
+        ctx.eval::<(), _>(RESET_HELPERS)?;
         ctx.eval::<(), _>(source)?;
         let snapshot = ctx.eval::<Object, _>("probe(ctx)")?;
         let provider_id: String = snapshot.get("providerId")?;

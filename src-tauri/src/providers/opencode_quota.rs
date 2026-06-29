@@ -26,6 +26,7 @@ pub enum OpenCodeQuotaError {
     Io(io::Error),
     Json(serde_json::Error),
     MissingSession,
+    RateLimited,
     Unauthorized,
     UnexpectedShape,
 }
@@ -55,6 +56,9 @@ impl std::fmt::Display for OpenCodeQuotaError {
             Self::Io(_) => write!(formatter, "OpenCode quota session could not be read"),
             Self::Json(_) => write!(formatter, "OpenCode quota data could not be parsed"),
             Self::MissingSession => write!(formatter, "OpenCode quota session is not connected"),
+            Self::RateLimited => {
+                write!(formatter, "OpenCode quota is rate limited; try again later")
+            }
             Self::Unauthorized => write!(
                 formatter,
                 "OpenCode quota session expired; paste a fresh browser cookie"
@@ -90,6 +94,9 @@ pub fn fetch_usage_summary_json(
     let status = response.status();
     if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
         return Err(OpenCodeQuotaError::Unauthorized);
+    }
+    if status == StatusCode::TOO_MANY_REQUESTS {
+        return Err(OpenCodeQuotaError::RateLimited);
     }
 
     let body = response.error_for_status()?.text()?;

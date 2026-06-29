@@ -1,8 +1,10 @@
 use crate::plugin_host::ProviderSnapshot;
 use serde::{Deserialize, Serialize};
+#[cfg(windows)]
+use std::{ffi::OsStr, os::windows::ffi::OsStrExt};
 use std::{
     fs, io,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -124,7 +126,51 @@ fn write_file(app: &tauri::AppHandle, file: &SnapshotFile) -> Result<(), Snapsho
         fs::create_dir_all(parent)?;
     }
 
-    fs::write(path, serde_json::to_vec_pretty(file)?)?;
+    write_file_atomic(&path, &serde_json::to_vec_pretty(file)?)?;
+    Ok(())
+}
+
+fn write_file_atomic(path: &Path, bytes: &[u8]) -> Result<(), SnapshotStoreError> {
+    let tmp_path = path.with_extension("tmp");
+    fs::write(&tmp_path, bytes)?;
+    replace_file(&tmp_path, path)?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn replace_file(from: &Path, to: &Path) -> Result<(), SnapshotStoreError> {
+    const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
+    const MOVEFILE_WRITE_THROUGH: u32 = 0x8;
+
+    extern "system" {
+        fn MoveFileExW(existing: *const u16, new: *const u16, flags: u32) -> i32;
+    }
+
+    fn wide(path: &Path) -> Vec<u16> {
+        OsStr::new(path)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
+    }
+
+    let from = wide(from);
+    let to = wide(to);
+    let moved = unsafe {
+        MoveFileExW(
+            from.as_ptr(),
+            to.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if moved == 0 {
+        return Err(SnapshotStoreError::Io(io::Error::last_os_error()));
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn replace_file(from: &Path, to: &Path) -> Result<(), SnapshotStoreError> {
+    fs::rename(from, to)?;
     Ok(())
 }
 
@@ -207,6 +253,24 @@ mod tests {
 
         assert!(!path.exists());
         assert!(dir.join("snapshots.json.bad").exists());
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn atomic_write_replaces_existing_snapshot_file() {
+        let dir =
+            std::env::temp_dir().join(format!("limitlens-snapshot-write-test-{}", now_seconds()));
+        fs::create_dir_all(&dir).expect("test dir should be created");
+        let path = dir.join(SNAPSHOTS_FILE);
+
+        write_file_atomic(&path, br#"{"latest":[]}"#).expect("initial write should work");
+        write_file_atomic(&path, br#"{"latest":[{"provider_id":"codex"}]}"#)
+            .expect("overwrite should work");
+
+        let contents = fs::read_to_string(&path).expect("snapshot file should be readable");
+        assert!(contents.contains("codex"));
+        assert!(!path.with_extension("tmp").exists());
 
         let _ = fs::remove_dir_all(dir);
     }
