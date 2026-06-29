@@ -9,9 +9,9 @@
 </p>
 
 <p align="center">
-  <a href="#download">Download</a> ·
-  <a href="#providers">Providers</a> ·
-  <a href="#build-from-source">Build from source</a> ·
+  <a href="#download">Download</a> |
+  <a href="#providers">Providers</a> |
+  <a href="#build-from-source">Build from source</a> |
   <a href="#security-and-privacy">Security</a>
 </p>
 
