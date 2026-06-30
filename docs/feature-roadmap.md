@@ -22,6 +22,25 @@ LimitLens should evolve from a tray quota viewer into a unified AI usage dashboa
 
 ## Near-Term Implementation Plan
 
+### Development Workflow
+
+**Status:** Active
+
+LimitLens now uses a normal open-source feature flow:
+
+- `main` is the stable integration branch.
+- Build features on scoped branches, usually `codex/<feature-name>`.
+- Open a PR for each meaningful feature, provider integration, or architecture change.
+- Treat the PR as the checkpoint: include summary, checks, screenshots for UI changes, and any decision notes.
+- Merge after review/smoke testing, then start the next feature from updated `main`.
+- Create GitHub Releases only from version tags such as `v0.1.1` or `v0.2.0`.
+
+Versioning guidance:
+
+- Patch releases (`v0.1.x`) are for fixes and small improvements.
+- Minor releases (`v0.2.0`) are for larger public feature batches, such as the resizable dashboard or provider expansion.
+- Feature branches are not releases; they are reviewable increments toward the next release.
+
 ### F1 - Draggable Glance Window
 
 **Status:** Implemented

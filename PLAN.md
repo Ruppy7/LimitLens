@@ -47,6 +47,8 @@ Decision → Concept → Build → Checkpoint
 
 | D20 | Main window direction | Fixed tray popup with Focus/Dashboard toggle - resizable dashboard app - separate compact/full windows | Planned: **resizable responsive dashboard** | The glance widget now covers the quick-focus job. Next, evolve the main window into the complete dashboard surface: resizable, analytics-friendly, and able to collapse into compact layouts below breakpoints instead of keeping a permanent Focus view. Exact breakpoint and taskbar behavior remain open until the first dashboard resize spike. |
 
+| D21 | Open-source workflow | Direct commits to main - long-running review branch - short feature branches with PRs | Decided: **feature branches + PR checkpoints** | Use `main` as the stable integration branch, build meaningful features on scoped branches such as `codex/glance-window`, and open PRs for review/checks before merging. Versioned public builds come from tags (`v0.1.x`, `v0.2.0`) rather than feature branches. |
+
 ## Scaffold decision
 
 Use the official `create-tauri-app` React TypeScript template with npm.
@@ -181,6 +183,7 @@ Ponytail scope: prove the desktop shell first, then add tray behavior. No settin
 - [x] Add draggable always-on-top glance window showing compact remaining quota for Codex, Claude, and OpenCode, using `5h | weekly` style values and the tray icon/main window for the expansive dashboard view.
 - [x] Enable local NSIS installer build for smoke testing.
 - [x] Decide public install path: GitHub Actions-built unsigned installer + portable zip + SHA256 checksums; signed installer later.
+- [x] Decide open-source contribution flow: short feature branches, PR checkpoints into `main`, and tagged releases for public builds.
 - [x] Rename product/app identity from InfUsage to LimitLens before installer work.
 - [ ] Add open-source guardrails: `CONTRIBUTING.md`, `SECURITY.md`, issue templates, PR template, and optional code of conduct.
 - [ ] Add `PRIVACY.md` covering local credentials, OpenCode cookie handling, Windows Credential Manager, provider API calls, snapshots, and no telemetry.
