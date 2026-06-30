@@ -186,6 +186,12 @@ pub fn hide_tray_window(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn show_tray_window(app: tauri::AppHandle) -> Result<(), String> {
+    tray::show_main_window(&app);
+    Ok(())
+}
+
+#[tauri::command]
 pub fn request_tray_close(app: tauri::AppHandle) -> Result<(), String> {
     tray::request_close_animation(&app).map_err(|error| error.to_string())
 }
@@ -202,6 +208,21 @@ pub fn set_tray_display_mode(app: tauri::AppHandle, mode: String) -> Result<(), 
     }
 
     tray::set_display_mode(&app, &mode).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn set_glance_visible(
+    app: tauri::AppHandle,
+    visible: bool,
+    x: Option<i32>,
+    y: Option<i32>,
+) -> Result<(), String> {
+    tray::set_glance_visible(&app, visible, x, y).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn set_glance_position(app: tauri::AppHandle, x: i32, y: i32) -> Result<(), String> {
+    tray::set_glance_position(&app, x, y).map_err(|error| error.to_string())
 }
 
 #[tauri::command]

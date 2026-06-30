@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "LimitLens",
         "width": 320,
         "height": 225,
@@ -19,6 +20,19 @@
         "maximizable": false,
         "decorations": false,
         "skipTaskbar": true,
+        "backgroundColor": "#09090b"
+      },
+      {
+        "label": "glance",
+        "title": "LimitLens Glance",
+        "width": 188,
+        "height": 48,
+        "resizable": false,
+        "maximizable": false,
+        "decorations": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "visible": false,
         "backgroundColor": "#09090b"
       }
     ],

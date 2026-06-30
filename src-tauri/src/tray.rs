@@ -7,7 +7,9 @@ use tauri::{
 };
 
 const MAIN_WINDOW: &str = "main";
+const GLANCE_WINDOW: &str = "glance";
 const POPUP_MARGIN: i32 = 16;
+const GLANCE_MARGIN: i32 = 8;
 const ALL_SIZE: (f64, f64) = (400.0, 540.0);
 const MINIMAL_SIZE: (f64, f64) = (320.0, 225.0);
 static POPPED_OUT: AtomicBool = AtomicBool::new(false);
@@ -68,7 +70,7 @@ fn toggle_main_window(app: &tauri::AppHandle) {
     show_popup_window(&window);
 }
 
-fn show_main_window(app: &tauri::AppHandle) {
+pub fn show_main_window(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
         return;
     };
@@ -121,6 +123,39 @@ pub fn set_display_mode(app: &tauri::AppHandle, mode: &str) -> tauri::Result<()>
     Ok(())
 }
 
+pub fn set_glance_visible(
+    app: &tauri::AppHandle,
+    visible: bool,
+    x: Option<i32>,
+    y: Option<i32>,
+) -> tauri::Result<()> {
+    let Some(window) = app.get_webview_window(GLANCE_WINDOW) else {
+        return Ok(());
+    };
+
+    if visible {
+        if let (Some(x), Some(y)) = (x, y) {
+            window.set_position(Position::Physical(PhysicalPosition { x, y }))?;
+        } else {
+            position_glance_window(&window);
+        }
+        window.set_always_on_top(true)?;
+        window.show()?;
+    } else {
+        window.hide()?;
+    }
+
+    Ok(())
+}
+
+pub fn set_glance_position(app: &tauri::AppHandle, x: i32, y: i32) -> tauri::Result<()> {
+    if let Some(window) = app.get_webview_window(GLANCE_WINDOW) {
+        window.set_position(Position::Physical(PhysicalPosition { x, y }))?;
+    }
+
+    Ok(())
+}
+
 fn show_popup_window(window: &tauri::WebviewWindow) {
     let popped_out = POPPED_OUT.load(Ordering::Relaxed);
     if !popped_out {
@@ -148,6 +183,25 @@ fn position_near_bottom_right(window: &tauri::WebviewWindow) {
     let y = work_area.position.y + work_area.size.height as i32
         - window_size.height as i32
         - POPUP_MARGIN;
+
+    let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
+}
+
+fn position_glance_window(window: &tauri::WebviewWindow) {
+    let Ok(Some(monitor)) = window.current_monitor() else {
+        return;
+    };
+    let Ok(window_size) = window.outer_size() else {
+        return;
+    };
+
+    let work_area = monitor.work_area();
+    let x = work_area.position.x + work_area.size.width as i32
+        - window_size.width as i32
+        - GLANCE_MARGIN;
+    let y = work_area.position.y + work_area.size.height as i32
+        - window_size.height as i32
+        - GLANCE_MARGIN;
 
     let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
 }

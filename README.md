@@ -11,6 +11,7 @@
 <p align="center">
   <a href="#download">Download</a> |
   <a href="#providers">Providers</a> |
+  <a href="#glance-window">Glance</a> |
   <a href="#build-from-source">Build from source</a> |
   <a href="#security-and-privacy">Security</a>
 </p>
@@ -34,6 +35,18 @@ It is built with Tauri, React, TypeScript, and Rust. Provider credentials and se
 - Claude: reads local Claude credentials and shows quota/reset summary.
 - OpenCode Go: shows authenticated Go limits from the OpenCode workspace page.
 - DeepSeek: optional API balance check, showing USD balance.
+
+## Glance Window
+
+LimitLens can show a tiny always-on-top glance window for the limits you check most often. It is draggable, remembers its position, and opens the main dashboard when clicked.
+
+The glance window keeps the display intentionally terse:
+
+```text
+Provider icon  5h remaining % | weekly remaining %
+```
+
+The main dashboard remains the place for setup, refresh actions, detailed cards, and future analytics.
 
 ## Download
 
@@ -93,6 +106,8 @@ https://opencode.ai/workspace/<your-workspace-id>/go
 4. Paste the `Cookie` request header from that logged-in browser request.
 
 The cookie is stored in Windows Credential Manager and used only by the Rust host to fetch quota fields. This may break if OpenCode changes the page shape or session behavior.
+
+LimitLens displays OpenCode quota as remaining percentage, matching the other quota providers. Earlier development builds showed OpenCode as used percentage.
 
 Alternative approach: OpenCode also keeps local usage data in `opencode.db`. Reading that database avoids browser cookies and is a viable future fallback, but it only reflects usage from that local device/profile, so it is less accurate than authenticated workspace quota for users who switch between Windows, WSL, or other machines.
 
