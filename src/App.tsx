@@ -258,6 +258,7 @@ function App() {
   const displayMode = useResponsiveDisplayMode();
   const [dashboardView, setDashboardView] = useState<DashboardView>(readDashboardView);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [addProviderOpen, setAddProviderOpen] = useState(false);
   const [opening, setOpening] = useState(false);
   const [closing, setClosing] = useState(false);
   const [nowSeconds, setNowSeconds] = useState(() => Math.floor(Date.now() / 1000));
@@ -347,6 +348,12 @@ function App() {
   useEffect(() => {
     persist("limitlens.disconnectedProviders", JSON.stringify(disconnectedProviders));
   }, [disconnectedProviders]);
+
+  useEffect(() => {
+    if (dashboardView !== "all" && disconnectedProviders[dashboardView]) {
+      setDashboardView("all");
+    }
+  }, [dashboardView, disconnectedProviders]);
 
   useEffect(() => {
     persist("limitlens.starredProviders", JSON.stringify(starredProviders));
@@ -559,12 +566,17 @@ function App() {
     setSnapshots((current) => ({ ...current, [key]: null }));
     setLastUpdatedAt((current) => ({ ...current, [key]: 0 }));
     setProviderError(key, null);
+    setDashboardView("all");
   }
 
   async function reconnectProvider(key: ProviderKey) {
     setDisconnectedProviders((current) => ({ ...current, [key]: false }));
+    setDashboardView(key);
+    setAddProviderOpen(false);
     if (key === "codex") await refreshCodex();
     if (key === "claude") await refreshClaude();
+    if (key === "deepseek" && hasKey) await refreshDeepSeek();
+    if (key === "opencode" && opencodeQuotaConnected) await refreshOpenCode();
   }
 
   function cardFor(key: ProviderKey): ReactNode {
@@ -613,9 +625,11 @@ function App() {
     const rightStarred = starredProviders[right.id] ? 1 : 0;
     return rightStarred - leftStarred;
   });
+  const visibleProviders = orderedProviders.filter((provider) => !disconnectedProviders[provider.id]);
+  const disconnectedProviderList = PROVIDERS.filter((provider) => disconnectedProviders[provider.id]);
   const selectedProvider = dashboardView === "all" ? null : dashboardView;
   const selectedProviderMeta = selectedProvider ? PROVIDERS.find((provider) => provider.id === selectedProvider) ?? PROVIDERS[0] : null;
-  const syncedCount = Object.values(snapshots).filter(Boolean).length;
+  const syncedCount = visibleProviders.filter((provider) => snapshots[provider.id]).length;
 
   return (
     <main
@@ -691,10 +705,23 @@ function App() {
           <aside className="dashboard-sidebar" aria-label="Providers">
             <div className="sidebar-head">
               <p className="sidebar-title">Providers</p>
-              <button aria-label="Add provider coming soon" className="sidebar-add" disabled title="Add provider flow coming soon" type="button">
+              <button
+                aria-expanded={addProviderOpen}
+                aria-label="Add provider"
+                className="sidebar-add"
+                onClick={() => setAddProviderOpen((current) => !current)}
+                title="Add provider"
+                type="button"
+              >
                 <Plus aria-hidden="true" size={13} />
               </button>
             </div>
+            {addProviderOpen && (
+              <AddProviderMenu
+                providers={disconnectedProviderList}
+                onAdd={(providerKey) => void reconnectProvider(providerKey)}
+              />
+            )}
             <nav className="provider-nav" aria-label="Pick provider">
               <button
                 aria-label="All providers"
@@ -707,7 +734,7 @@ function App() {
                 <span className="provider-nav-label">All</span>
                 <span className="rail-count">{syncedCount}</span>
               </button>
-              {orderedProviders.map((provider) => (
+              {visibleProviders.map((provider) => (
                 <button
                   aria-label={provider.title}
                   aria-pressed={dashboardView === provider.id}
@@ -733,9 +760,9 @@ function App() {
             {dashboardView === "all" ? (
               <AllDashboardView
                 cardFor={cardFor}
-                providers={orderedProviders}
+                providers={visibleProviders}
                 syncedCount={syncedCount}
-                snapshotCount={PROVIDERS.length}
+                snapshotCount={visibleProviders.length}
                 compact={displayMode === "minimal"}
               />
             ) : (
@@ -775,7 +802,7 @@ function App() {
       {!settingsOpen && displayMode === "all" && (
         <footer className="panel-foot">
           {Object.values(snapshots).every((snapshot) => snapshot === null)
-            ? "No data yet - open Settings to connect providers."
+            ? "No data yet - open a provider page to connect providers."
             : "Snapshots are stored locally."}
         </footer>
       )}
@@ -824,6 +851,32 @@ function AllDashboardView({
           </section>
         ))}
       </div>
+    </section>
+  );
+}
+
+function AddProviderMenu({
+  onAdd,
+  providers,
+}: {
+  onAdd: (key: ProviderKey) => void;
+  providers: ProviderMeta[];
+}) {
+  return (
+    <section className="add-provider-menu" aria-label="Add provider">
+      {providers.length === 0 ? (
+        <p>All providers are visible.</p>
+      ) : (
+        providers.map((provider) => (
+          <button key={provider.id} onClick={() => onAdd(provider.id)} type="button">
+            <span className="rail-mark">
+              <img alt="" src={provider.icon} />
+            </span>
+            <span>{provider.title}</span>
+            <Plus aria-hidden="true" size={12} />
+          </button>
+        ))
+      )}
     </section>
   );
 }
@@ -1099,6 +1152,7 @@ function GlanceApp() {
   const [snapshots, setSnapshots] = useState<Record<string, ProviderSnapshot | null>>({});
   const [themeMode, setThemeMode] = useState<ThemeMode>(readThemeMode);
   const [starredProviders, setStarredProviders] = useState<StarredProviders>(readStarredProviders);
+  const [disconnectedProviders, setDisconnectedProviders] = useState<DisconnectedProviders>(readDisconnectedProviders);
   const glanceWindow = useMemo(() => getCurrentWindow(), []);
   const suppressOpenUntil = useRef(0);
 
@@ -1125,6 +1179,7 @@ function GlanceApp() {
     const settingsUnlistenPromise = listen("settings-updated", () => {
       setThemeMode(readThemeMode());
       setStarredProviders(readStarredProviders());
+      setDisconnectedProviders(readDisconnectedProviders());
     });
     const interval = window.setInterval(() => {
       void loadSnapshots();
@@ -1161,13 +1216,18 @@ function GlanceApp() {
     invoke("show_tray_window").catch(() => {});
   }
 
-  const starredKeys = PROVIDERS.filter((provider) => starredProviders[provider.id] && provider.id !== "deepseek").map((provider) => provider.id);
-  const glanceKeys = starredKeys.length > 0 ? starredKeys : (["codex", "claude", "opencode"] as ProviderKey[]);
+  const starredKeys = PROVIDERS.filter((provider) => starredProviders[provider.id] && !disconnectedProviders[provider.id]).map(
+    (provider) => provider.id,
+  );
+  const defaultGlanceKeys = (["codex", "claude", "opencode"] as ProviderKey[]).filter((key) => !disconnectedProviders[key]);
+  const glanceKeys = starredKeys.length > 0 ? starredKeys : defaultGlanceKeys;
   const items = glanceKeys
     .slice(0, 4)
     .map((key) => {
       const meta = PROVIDERS.find((provider) => provider.id === key)!;
-      return glanceItem(key, meta.icon, snapshots[key], key === "opencode" ? "Rolling" : "Session", "Weekly");
+      return key === "deepseek"
+        ? glanceBalanceItem(key, meta.icon, snapshots[key])
+        : glanceItem(key, meta.icon, snapshots[key], key === "opencode" ? "Rolling" : "Session", "Weekly");
     });
 
   return (
@@ -1188,13 +1248,28 @@ function GlanceApp() {
           </span>
           <span className="glance-metrics">
             <strong>{item.current ?? "--"}</strong>
-            <span aria-hidden="true">|</span>
-            <span>{item.weekly ?? "--"}</span>
+            {item.weekly !== null && (
+              <>
+                <span aria-hidden="true">|</span>
+                <span>{item.weekly ?? "--"}</span>
+              </>
+            )}
           </span>
         </span>
       ))}
     </button>
   );
+}
+
+function glanceBalanceItem(id: ProviderKey, icon: string, snapshot: ProviderSnapshot | null | undefined) {
+  const usd = snapshot?.lines.find((line) => line.label.toUpperCase() === "USD");
+  return {
+    id,
+    icon,
+    current: usd ? dollarLabel(usd.value) : null,
+    weekly: null,
+    empty: !usd,
+  };
 }
 
 function glanceItem(
@@ -1213,6 +1288,15 @@ function glanceItem(
     weekly: weekly ? percentLabelFromValue(weekly.value) : null,
     empty: !current && !weekly,
   };
+}
+
+function dollarLabel(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "$0.00";
+  if (trimmed.startsWith("$")) return trimmed;
+  const amount = Number(trimmed);
+  if (Number.isFinite(amount)) return `$${amount.toFixed(2)}`;
+  return trimmed;
 }
 
 function ProviderCard({

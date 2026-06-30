@@ -537,7 +537,7 @@ input:focus-visible,
 .dashboard-sidebar {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   align-content: start;
   gap: 8px;
   padding: 8px;
@@ -584,11 +584,66 @@ input:focus-visible,
   border-color: var(--faint);
 }
 
+.sidebar-add[aria-expanded="true"] {
+  color: var(--accent-ink);
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+
 .dashboard-shell.compact .sidebar-title {
   display: none;
 }
 
 .dashboard-shell.compact .sidebar-add {
+  display: none;
+}
+
+.add-provider-menu {
+  display: grid;
+  gap: 5px;
+  padding: 6px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.add-provider-menu p {
+  color: var(--faint);
+  font-size: 0.68rem;
+  line-height: 1.3;
+}
+
+.add-provider-menu button {
+  min-width: 0;
+  min-height: 30px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: calc(var(--radius) - 1px);
+  padding: 4px 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-align: left;
+}
+
+.add-provider-menu button:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.add-provider-menu button span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-shell.compact .add-provider-menu {
   display: none;
 }
 

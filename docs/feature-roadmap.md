@@ -96,7 +96,8 @@ Plan:
 - Make provider sidebar clicks replace the main content with that provider's page. Implemented.
 - Move provider-specific setup out of Settings and onto provider detail pages. Implemented.
 - Add starred providers, sort them first in the sidebar, and use starred providers for the glance window when present. Implemented.
-- Add a disabled Add Provider affordance in the sidebar; the real provider picker is a later slice.
+- Hide explicitly disconnected providers from the sidebar and All view. Implemented.
+- Add a sidebar Add Provider menu for restoring explicitly disconnected providers. Implemented.
 - Keep compact behavior as a responsive small-window layout rather than a manual Focus mode.
 - Keep tray icon click as the main dashboard launcher.
 - Use responsive breakpoints: compact layouts can still behave like the old focus/dashboard views when the window is small, while larger sizes become a full app-style dashboard.
@@ -133,12 +134,12 @@ Current slice:
 - Starred providers sort to the top of the dashboard sidebar.
 - The glance window uses starred providers when any supported provider is starred.
 - If no supported provider is starred, the glance window falls back to Codex, Claude, and OpenCode.
-- DeepSeek is skipped for glance until it has a compatible current/weekly limit metric.
+- DeepSeek can appear in the glance window as a single USD balance value when starred.
 
 Follow-up:
 
 - Replace boolean stars with explicit glance priority/order once provider count grows.
-- Add a real Add Provider / provider picker flow.
+- Expand Add Provider from "restore disconnected provider" into a full provider picker for newly supported providers.
 
 ## Metric Model Evolution
 

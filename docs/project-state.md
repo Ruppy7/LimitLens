@@ -21,7 +21,8 @@ Last checked: 2026-06-30
 - A draggable always-on-top glance window is implemented; it shows compact remaining quota values and opens the main dashboard on click.
 - Provider cards, status chips, per-provider refresh, global refresh, optional periodic refresh, theme setting, provider sidebar, All dashboard view, provider-specific detail pages, and dashboard grid shell.
 - Provider-specific setup now lives on provider detail pages instead of the global Settings sheet. Settings is app-level only for theme, glance, and refresh cadence.
-- Starred providers sort first in the sidebar and drive the glance window when at least one supported provider is starred.
+- Explicitly disconnected providers are hidden from the sidebar and All view, then restored through the sidebar Add Provider menu.
+- Starred providers sort first in the sidebar and drive the glance window when starred; DeepSeek appears as a single USD balance value instead of `5h | weekly`.
 - The main window is taskbar-visible; the glance window remains skipped from the normal taskbar.
 
 ## Provider state
