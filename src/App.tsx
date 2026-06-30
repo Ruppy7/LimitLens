@@ -1,4 +1,4 @@
-import { type PointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type MouseEvent, type PointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -8,15 +8,13 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  Info,
   Loader2,
   Minus,
-  Pin,
-  PinOff,
   PlugZap,
   Plus,
   RefreshCw,
   Settings,
+  Star,
   Trash2,
   Unplug,
 } from "lucide-react";
@@ -51,15 +49,30 @@ type DeepSeekKeySlot = {
 type DisplayMode = "minimal" | "all";
 type ThemeMode = "system" | "light" | "dark" | "tokyo-night";
 type ProviderKey = "codex" | "claude" | "deepseek" | "opencode";
+type DashboardView = "all" | ProviderKey;
 type LifecycleState = "refreshing" | "fresh" | "stale" | "error" | "empty";
 type DisconnectedProviders = Partial<Record<ProviderKey, boolean>>;
+type StarredProviders = Partial<Record<ProviderKey, boolean>>;
+type ResizeDirection = "East" | "North" | "NorthEast" | "NorthWest" | "South" | "SouthEast" | "SouthWest" | "West";
 const WINDOW_LABEL = getCurrentWindow().label;
 
+const COMPACT_LAYOUT_MAX_WIDTH = 519;
+const COMPACT_LAYOUT_MAX_HEIGHT = 419;
 const STALE_AFTER_SECONDS = 15 * 60;
 const DEFAULT_REFRESH_INTERVAL_MINUTES = 15;
 const MIN_REFRESH_INTERVAL_MINUTES = 5;
 const MAX_REFRESH_INTERVAL_MINUTES = 120;
 const archivedOpenCodeSpendLabels = new Set(["Last 7 days", "Last 30 days", "Tokens (30d)", "All-time"]);
+const RESIZE_GRIPS: { className: string; direction: ResizeDirection }[] = [
+  { className: "resize-grip-n", direction: "North" },
+  { className: "resize-grip-e", direction: "East" },
+  { className: "resize-grip-s", direction: "South" },
+  { className: "resize-grip-w", direction: "West" },
+  { className: "resize-grip-ne", direction: "NorthEast" },
+  { className: "resize-grip-nw", direction: "NorthWest" },
+  { className: "resize-grip-se", direction: "SouthEast" },
+  { className: "resize-grip-sw", direction: "SouthWest" },
+];
 
 type ProviderMeta = {
   id: ProviderKey;
@@ -76,25 +89,15 @@ const PROVIDERS: ProviderMeta[] = [
   { id: "opencode", title: "OpenCode Go", icon: opencodeIcon, note: "Links an OpenCode console session to show Go limits. Local device DB spend is a possible fallback idea, not current app code.", emptyLabel: "Go limits not linked" },
 ];
 
-const LOCAL_LOGIN_PROVIDERS: ProviderKey[] = ["codex", "claude"];
-
-function readDisplayMode() {
-  const value = readPersisted("limitlens.displayMode", "minimal");
-  return value === "all" || value === "minimal" ? value : "minimal";
-}
-
-function readProviderKey() {
-  const value = readPersisted("limitlens.selectedProvider", "codex");
-  return PROVIDERS.some((provider) => provider.id === value) ? (value as ProviderKey) : "codex";
+function readDashboardView(): DashboardView {
+  const value = readPersisted("limitlens.dashboardView", readPersisted("limitlens.selectedProvider", "all"));
+  if (value === "all") return "all";
+  return PROVIDERS.some((provider) => provider.id === value) ? (value as ProviderKey) : "all";
 }
 
 function readThemeMode() {
   const value = readPersisted("limitlens.themeMode", "system");
   return value === "system" || value === "light" || value === "dark" || value === "tokyo-night" ? value : "system";
-}
-
-function readPoppedOut() {
-  return readPersisted("limitlens.poppedOut", "false") === "true";
 }
 
 function readRefreshEnabled() {
@@ -134,6 +137,19 @@ function readDisconnectedProviders(): DisconnectedProviders {
   try {
     const parsed = JSON.parse(value) as DisconnectedProviders;
     return PROVIDERS.reduce<DisconnectedProviders>((next, provider) => {
+      if (parsed[provider.id] === true) next[provider.id] = true;
+      return next;
+    }, {});
+  } catch {
+    return {};
+  }
+}
+
+function readStarredProviders(): StarredProviders {
+  const value = readPersisted("limitlens.starredProviders", "{}");
+  try {
+    const parsed = JSON.parse(value) as StarredProviders;
+    return PROVIDERS.reduce<StarredProviders>((next, provider) => {
       if (parsed[provider.id] === true) next[provider.id] = true;
       return next;
     }, {});
@@ -191,6 +207,25 @@ function BrandMark() {
   return <img className="brand-mark" src={limitLensLogo} alt="" aria-hidden="true" />;
 }
 
+function useResponsiveDisplayMode(): DisplayMode {
+  const [size, setSize] = useState(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }));
+
+  useEffect(() => {
+    function updateSize() {
+      setSize({ width: window.innerWidth, height: window.innerHeight });
+    }
+
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
+  }, []);
+
+  return size.width <= COMPACT_LAYOUT_MAX_WIDTH || size.height <= COMPACT_LAYOUT_MAX_HEIGHT ? "minimal" : "all";
+}
+
 function App() {
   if (WINDOW_LABEL === "glance") {
     return <GlanceApp />;
@@ -230,20 +265,17 @@ function App() {
   const [opencodeWorkspace, setOpencodeWorkspace] = useState("");
 
   const [themeMode, setThemeMode] = useState<ThemeMode>(readThemeMode);
-  const [displayMode, setDisplayMode] = useState<DisplayMode>(
-    readDisplayMode,
-  );
-  const [selectedProvider, setSelectedProvider] = useState<ProviderKey>(
-    readProviderKey,
-  );
+  const displayMode = useResponsiveDisplayMode();
+  const [dashboardView, setDashboardView] = useState<DashboardView>(readDashboardView);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [addProviderOpen, setAddProviderOpen] = useState(false);
   const [opening, setOpening] = useState(false);
   const [closing, setClosing] = useState(false);
-  const [poppedOut, setPoppedOut] = useState(readPoppedOut);
   const [nowSeconds, setNowSeconds] = useState(() => Math.floor(Date.now() / 1000));
   const [refreshEnabled, setRefreshEnabled] = useState(readRefreshEnabled);
   const [refreshIntervalMinutes, setRefreshIntervalMinutes] = useState(readRefreshIntervalMinutes);
   const [disconnectedProviders, setDisconnectedProviders] = useState<DisconnectedProviders>(readDisconnectedProviders);
+  const [starredProviders, setStarredProviders] = useState<StarredProviders>(readStarredProviders);
   const [glanceEnabled, setGlanceEnabled] = useState(readGlanceEnabled);
 
   const savedKeyCount = useMemo(() => keySlots.filter((slot) => slot.has_key).length, [keySlots]);
@@ -314,16 +346,9 @@ function App() {
   }, []);
 
   useEffect(() => {
-    persist("limitlens.displayMode", displayMode);
-  }, [displayMode]);
-
-  useEffect(() => {
-    invoke("set_tray_display_mode", { mode: settingsOpen ? "all" : displayMode }).catch(() => {});
-  }, [displayMode, settingsOpen]);
-
-  useEffect(() => {
-    persist("limitlens.selectedProvider", selectedProvider);
-  }, [selectedProvider]);
+    persist("limitlens.dashboardView", dashboardView);
+    if (dashboardView !== "all") persist("limitlens.selectedProvider", dashboardView);
+  }, [dashboardView]);
 
   useEffect(() => {
     persist("limitlens.themeMode", themeMode);
@@ -331,13 +356,19 @@ function App() {
   }, [themeMode]);
 
   useEffect(() => {
-    persist("limitlens.poppedOut", String(poppedOut));
-    invoke("set_tray_popped_out", { poppedOut }).catch(() => {});
-  }, [poppedOut]);
-
-  useEffect(() => {
     persist("limitlens.disconnectedProviders", JSON.stringify(disconnectedProviders));
   }, [disconnectedProviders]);
+
+  useEffect(() => {
+    if (dashboardView !== "all" && disconnectedProviders[dashboardView]) {
+      setDashboardView("all");
+    }
+  }, [dashboardView, disconnectedProviders]);
+
+  useEffect(() => {
+    persist("limitlens.starredProviders", JSON.stringify(starredProviders));
+    emit("settings-updated").catch(() => {});
+  }, [starredProviders]);
 
   useEffect(() => {
     persist("limitlens.refreshIntervalMinutes", String(refreshIntervalMinutes));
@@ -408,11 +439,6 @@ function App() {
     if (!disconnectedProviders.deepseek && hasKey) tasks.push(refreshDeepSeek());
     if (!disconnectedProviders.opencode && opencodeQuotaConnected) tasks.push(refreshOpenCode());
     await Promise.allSettled(tasks);
-  }
-
-  function chooseDisplayMode(mode: DisplayMode) {
-    setDisplayMode(mode);
-    setSettingsOpen(false);
   }
 
   function chooseRefreshInterval(value: number) {
@@ -534,6 +560,13 @@ function App() {
     void getCurrentWindow().startDragging();
   }
 
+  function startWindowResize(direction: ResizeDirection, event: MouseEvent<HTMLElement> | PointerEvent<HTMLElement>) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void getCurrentWindow().startResizeDragging(direction);
+  }
+
   function hideTray() {
     invoke("request_tray_close").catch(() => invoke("hide_tray_window").catch(() => {}));
   }
@@ -543,12 +576,17 @@ function App() {
     setSnapshots((current) => ({ ...current, [key]: null }));
     setLastUpdatedAt((current) => ({ ...current, [key]: 0 }));
     setProviderError(key, null);
+    setDashboardView("all");
   }
 
   async function reconnectProvider(key: ProviderKey) {
     setDisconnectedProviders((current) => ({ ...current, [key]: false }));
+    setDashboardView(key);
+    setAddProviderOpen(false);
     if (key === "codex") await refreshCodex();
     if (key === "claude") await refreshClaude();
+    if (key === "deepseek" && hasKey) await refreshDeepSeek();
+    if (key === "opencode" && opencodeQuotaConnected) await refreshOpenCode();
   }
 
   function cardFor(key: ProviderKey): ReactNode {
@@ -566,9 +604,9 @@ function App() {
 
     let hint: string | null = null;
     if (state === "empty") {
-      if (disconnectedProviders[key]) hint = "Enable in Settings";
-      else if (key === "deepseek" && !hasKey) hint = "Add an API key in Settings";
-      else if (key === "opencode" && !opencodeQuotaConnected) hint = "Link dev quota in Settings";
+      if (disconnectedProviders[key]) hint = "Reconnect from this provider page";
+      else if (key === "deepseek" && !hasKey) hint = "Add an API key from the DeepSeek page";
+      else if (key === "opencode" && !opencodeQuotaConnected) hint = "Link Go limits from the OpenCode page";
     }
 
     return (
@@ -588,14 +626,48 @@ function App() {
     );
   }
 
+  function toggleStarredProvider(key: ProviderKey) {
+    setStarredProviders((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  const orderedProviders = useMemo(
+    () =>
+      [...PROVIDERS].sort((left, right) => {
+        const leftStarred = starredProviders[left.id] ? 1 : 0;
+        const rightStarred = starredProviders[right.id] ? 1 : 0;
+        return rightStarred - leftStarred;
+      }),
+    [starredProviders],
+  );
+  const visibleProviders = useMemo(
+    () => orderedProviders.filter((provider) => !disconnectedProviders[provider.id]),
+    [disconnectedProviders, orderedProviders],
+  );
+  const disconnectedProviderList = useMemo(
+    () => PROVIDERS.filter((provider) => disconnectedProviders[provider.id]),
+    [disconnectedProviders],
+  );
+  const selectedProvider = dashboardView === "all" ? null : dashboardView;
+  const selectedProviderMeta = selectedProvider ? PROVIDERS.find((provider) => provider.id === selectedProvider)! : null;
+  const syncedCount = useMemo(
+    () => visibleProviders.filter((provider) => snapshots[provider.id]).length,
+    [snapshots, visibleProviders],
+  );
+
   return (
     <main
       className={`${displayMode === "minimal" ? "panel minimal" : "panel"}${opening ? " opening" : ""}${closing ? " closing" : ""}`}
       data-theme={themeMode}
-      data-floating={poppedOut}
-      onPointerDown={poppedOut ? startWindowDrag : undefined}
     >
-      <header className="panel-header">
+      {RESIZE_GRIPS.map(({ className, direction }) => (
+        <span
+          aria-hidden="true"
+          className={`resize-grip ${className}`}
+          key={direction}
+          onMouseDown={(event) => startWindowResize(direction, event)}
+        />
+      ))}
+      <header className="panel-header" onPointerDown={startWindowDrag}>
         <div className="brand">
           <BrandMark />
           <div className="brand-text">
@@ -625,16 +697,6 @@ function App() {
           >
             {settingsOpen ? <ArrowLeft aria-hidden="true" size={15} /> : <Settings aria-hidden="true" size={15} />}
           </button>
-          <button
-            aria-label={poppedOut ? "Floating window - attach to tray" : "Attached to tray - pop out"}
-            aria-pressed={poppedOut}
-            className="icon-button pin-button"
-            onClick={() => setPoppedOut((current) => !current)}
-            title={poppedOut ? "Floating window" : "Attached to tray"}
-            type="button"
-          >
-            {poppedOut ? <PinOff aria-hidden="true" size={15} /> : <Pin aria-hidden="true" size={15} />}
-          </button>
           <button aria-label="Hide window" className="icon-button" onClick={hideTray} type="button">
             <Minus aria-hidden="true" size={15} />
           </button>
@@ -643,65 +705,110 @@ function App() {
 
       {settingsOpen ? (
         <SettingsSheet
-          displayMode={displayMode}
           themeMode={themeMode}
-          disconnectedProviders={disconnectedProviders}
           glanceEnabled={glanceEnabled}
-          onChooseDisplayMode={chooseDisplayMode}
           onChooseThemeMode={setThemeMode}
-          hasKey={hasKey}
-          isAddingKey={isAddingKey}
-          apiKey={apiKey}
-          opencodeQuotaConnected={opencodeQuotaConnected}
           refreshEnabled={refreshEnabled}
           refreshIntervalMinutes={refreshIntervalMinutes}
-          opencodeCookie={opencodeCookie}
-          opencodeWorkspace={opencodeWorkspace}
-          onApiKeyChange={setApiKey}
-          onSaveKey={saveKey}
-          onDeleteKey={deleteSavedKey}
-          onBeginAddKey={beginKeyReplace}
-          onCancelAddKey={cancelKeyReplace}
-          onConnectQuota={connectQuota}
-          onDisconnectQuota={disconnectQuota}
           onRefreshEnabledChange={setRefreshEnabled}
           onGlanceEnabledChange={setGlanceEnabled}
           onRefreshIntervalChange={chooseRefreshInterval}
-          onWorkspaceChange={setOpencodeWorkspace}
-          onCookieChange={setOpencodeCookie}
-          onDisconnectProvider={disconnectProvider}
-          onReconnectProvider={reconnectProvider}
         />
       ) : (
-        <section className={displayMode === "minimal" ? "provider-browser" : "provider-browser all"} aria-label="Providers">
-          {displayMode === "minimal" && (
-            <nav className="provider-rail" aria-label="Pick provider">
-              {PROVIDERS.map((provider) => (
+        <section className={displayMode === "minimal" ? "dashboard-shell compact" : "dashboard-shell"} aria-label="Dashboard">
+          <aside className="dashboard-sidebar" aria-label="Providers">
+            <div className="sidebar-head">
+              <p className="sidebar-title">Providers</p>
+              <button
+                aria-expanded={addProviderOpen}
+                aria-label="Add provider"
+                className="sidebar-add"
+                onClick={() => setAddProviderOpen((current) => !current)}
+                title="Add provider"
+                type="button"
+              >
+                <Plus aria-hidden="true" size={13} />
+              </button>
+            </div>
+            {addProviderOpen && (
+              <AddProviderMenu
+                providers={disconnectedProviderList}
+                onAdd={(providerKey) => void reconnectProvider(providerKey)}
+              />
+            )}
+            <nav className="provider-nav" aria-label="Pick provider">
+              <button
+                aria-label="All providers"
+                aria-pressed={dashboardView === "all"}
+                className="provider-nav-item all-view"
+                onClick={() => setDashboardView("all")}
+                type="button"
+              >
+                <span className="rail-mark all-mark">All</span>
+                <span className="provider-nav-label">All</span>
+                <span className="rail-count">{syncedCount}</span>
+              </button>
+              {visibleProviders.map((provider) => (
                 <button
                   aria-label={provider.title}
-                  aria-pressed={selectedProvider === provider.id}
-                  className="rail-item"
+                  aria-pressed={dashboardView === provider.id}
+                  className="provider-nav-item"
                   key={provider.id}
-                  onClick={() => setSelectedProvider(provider.id)}
+                  onClick={() => setDashboardView(provider.id)}
                   type="button"
                 >
                   <span className="rail-mark">
                     <img alt="" src={provider.icon} />
                   </span>
-                  <span className={authConnected(provider.id) ? "rail-dot on" : "rail-dot"} />
+                  <span className="provider-nav-label">{provider.title}</span>
+                  <span className="nav-status">
+                    {starredProviders[provider.id] && <Star aria-hidden="true" className="nav-star-indicator" size={10} />}
+                    <span className={authConnected(provider.id) ? "rail-dot on" : "rail-dot"} />
+                  </span>
                 </button>
               ))}
             </nav>
-          )}
+          </aside>
 
-          <div className="provider-list" key={displayMode === "minimal" ? selectedProvider : "all"}>
-            {displayMode === "minimal"
-              ? cardFor(selectedProvider)
-              : PROVIDERS.map((provider) => (
-                  <section aria-label={provider.title} className="card-slot" key={provider.id}>
-                    {cardFor(provider.id)}
-                  </section>
-                ))}
+          <div className="dashboard-main">
+            {dashboardView === "all" ? (
+              <AllDashboardView
+                cardFor={cardFor}
+                providers={visibleProviders}
+                syncedCount={syncedCount}
+                snapshotCount={visibleProviders.length}
+                compact={displayMode === "minimal"}
+              />
+            ) : (
+              selectedProvider &&
+              selectedProviderMeta && (
+                <ProviderDashboardView
+                  apiKey={apiKey}
+                  card={cardFor(selectedProvider)}
+                  disconnected={Boolean(disconnectedProviders[selectedProvider])}
+                  hasKey={hasKey}
+                  isAddingKey={isAddingKey}
+                  isStarred={Boolean(starredProviders[selectedProvider])}
+                  meta={selectedProviderMeta}
+                  opencodeCookie={opencodeCookie}
+                  opencodeQuotaConnected={opencodeQuotaConnected}
+                  opencodeWorkspace={opencodeWorkspace}
+                  providerKey={selectedProvider}
+                  onApiKeyChange={setApiKey}
+                  onBeginAddKey={beginKeyReplace}
+                  onCancelAddKey={cancelKeyReplace}
+                  onConnectQuota={connectQuota}
+                  onCookieChange={setOpencodeCookie}
+                  onDeleteKey={deleteSavedKey}
+                  onDisconnectProvider={disconnectProvider}
+                  onDisconnectQuota={disconnectQuota}
+                  onReconnectProvider={reconnectProvider}
+                  onSaveKey={saveKey}
+                  onToggleStar={() => toggleStarredProvider(selectedProvider)}
+                  onWorkspaceChange={setOpencodeWorkspace}
+                />
+              )
+            )}
           </div>
         </section>
       )}
@@ -709,11 +816,335 @@ function App() {
       {!settingsOpen && displayMode === "all" && (
         <footer className="panel-foot">
           {Object.values(snapshots).every((snapshot) => snapshot === null)
-            ? "No data yet - open Settings to connect providers."
+            ? "No data yet - open a provider page to connect providers."
             : "Snapshots are stored locally."}
         </footer>
       )}
     </main>
+  );
+}
+
+function AllDashboardView({
+  cardFor,
+  compact,
+  providers,
+  snapshotCount,
+  syncedCount,
+}: {
+  cardFor: (key: ProviderKey) => ReactNode;
+  compact: boolean;
+  providers: ProviderMeta[];
+  snapshotCount: number;
+  syncedCount: number;
+}) {
+  return (
+    <section className="dashboard-view all-dashboard-view" aria-label="All providers">
+      {!compact && (
+        <div className="dashboard-intro">
+          <div>
+            <h2>All providers</h2>
+            <p>Usage, tokens, models, and spend across connected providers.</p>
+          </div>
+          <span>
+            {syncedCount}/{snapshotCount} synced
+          </span>
+        </div>
+      )}
+      {!compact && (
+        <div className="analytics-grid" aria-label="Analytics placeholders">
+          <AnalyticsTile label="Usage" value="Live" note="Current provider limit snapshots" />
+          <AnalyticsTile label="Tokens" value="Soon" note="Normalized token usage across models" />
+          <AnalyticsTile label="Models" value="Soon" note="Filter usage by model/provider" />
+          <AnalyticsTile label="Price" value="Soon" note="Subscription spend and extra usage" />
+        </div>
+      )}
+      <div className="provider-list" key={compact ? "compact-all" : "all"}>
+        {providers.map((provider) => (
+          <section aria-label={provider.title} className="card-slot" key={provider.id}>
+            {cardFor(provider.id)}
+          </section>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AddProviderMenu({
+  onAdd,
+  providers,
+}: {
+  onAdd: (key: ProviderKey) => void;
+  providers: ProviderMeta[];
+}) {
+  return (
+    <section className="add-provider-menu" aria-label="Add provider">
+      {providers.length === 0 ? (
+        <p>All providers are visible.</p>
+      ) : (
+        providers.map((provider) => (
+          <button key={provider.id} onClick={() => onAdd(provider.id)} type="button">
+            <span className="rail-mark">
+              <img alt="" src={provider.icon} />
+            </span>
+            <span>{provider.title}</span>
+            <Plus aria-hidden="true" size={12} />
+          </button>
+        ))
+      )}
+    </section>
+  );
+}
+
+function ProviderDashboardView({
+  apiKey,
+  card,
+  disconnected,
+  hasKey,
+  isAddingKey,
+  isStarred,
+  meta,
+  opencodeCookie,
+  opencodeQuotaConnected,
+  opencodeWorkspace,
+  providerKey,
+  onApiKeyChange,
+  onBeginAddKey,
+  onCancelAddKey,
+  onConnectQuota,
+  onCookieChange,
+  onDeleteKey,
+  onDisconnectProvider,
+  onDisconnectQuota,
+  onReconnectProvider,
+  onSaveKey,
+  onToggleStar,
+  onWorkspaceChange,
+}: {
+  apiKey: string;
+  card: ReactNode;
+  disconnected: boolean;
+  hasKey: boolean;
+  isAddingKey: boolean;
+  isStarred: boolean;
+  meta: ProviderMeta;
+  opencodeCookie: string;
+  opencodeQuotaConnected: boolean;
+  opencodeWorkspace: string;
+  providerKey: ProviderKey;
+  onApiKeyChange: (value: string) => void;
+  onBeginAddKey: () => void;
+  onCancelAddKey: () => void;
+  onConnectQuota: () => void;
+  onCookieChange: (value: string) => void;
+  onDeleteKey: () => void;
+  onDisconnectProvider: (key: ProviderKey) => void;
+  onDisconnectQuota: () => void;
+  onReconnectProvider: (key: ProviderKey) => void;
+  onSaveKey: () => void;
+  onToggleStar: () => void;
+  onWorkspaceChange: (value: string) => void;
+}) {
+  return (
+    <section className="dashboard-view provider-page" aria-label={`${meta.title} dashboard`}>
+      <div className="provider-hero">
+        <div className="detail-heading">
+          <span className="detail-mark">
+            <img alt="" src={meta.icon} />
+          </span>
+          <div>
+            <h2>{meta.title}</h2>
+            <p>{meta.note}</p>
+          </div>
+        </div>
+        <div className="provider-page-actions">
+          <button aria-pressed={isStarred} className="star-button" onClick={onToggleStar} type="button">
+            <Star aria-hidden="true" size={13} />
+            {isStarred ? "Starred" : "Star"}
+          </button>
+          {(providerKey === "codex" || providerKey === "claude") && (
+            <button
+              className="btn ghost"
+              onClick={() => (disconnected ? void onReconnectProvider(providerKey) : onDisconnectProvider(providerKey))}
+              type="button"
+            >
+              {disconnected ? <PlugZap aria-hidden="true" size={13} /> : <Unplug aria-hidden="true" size={13} />}
+              {disconnected ? "Reconnect" : "Disconnect"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="provider-page-grid">
+        <div className="provider-current">{card}</div>
+        <ProviderSetupPanel
+          apiKey={apiKey}
+          hasKey={hasKey}
+          isAddingKey={isAddingKey}
+          opencodeCookie={opencodeCookie}
+          opencodeQuotaConnected={opencodeQuotaConnected}
+          opencodeWorkspace={opencodeWorkspace}
+          providerKey={providerKey}
+          onApiKeyChange={onApiKeyChange}
+          onBeginAddKey={onBeginAddKey}
+          onCancelAddKey={onCancelAddKey}
+          onConnectQuota={onConnectQuota}
+          onCookieChange={onCookieChange}
+          onDeleteKey={onDeleteKey}
+          onDisconnectQuota={onDisconnectQuota}
+          onSaveKey={onSaveKey}
+          onWorkspaceChange={onWorkspaceChange}
+        />
+      </div>
+
+      <div className="analytics-grid provider-analytics" aria-label={`${meta.title} future analytics`}>
+        <AnalyticsTile label="Token usage" value="Soon" note="Per-model token totals will appear here." />
+        <AnalyticsTile label="Price usage" value="Soon" note="Subscription spend and usage price." />
+        <AnalyticsTile label="Extra usage" value="Soon" note="Overage or extra credits where providers expose it." />
+        <AnalyticsTile label="Model filters" value="Soon" note="Filter by model, date range, and source." />
+      </div>
+    </section>
+  );
+}
+
+function ProviderSetupPanel({
+  apiKey,
+  hasKey,
+  isAddingKey,
+  opencodeCookie,
+  opencodeQuotaConnected,
+  opencodeWorkspace,
+  providerKey,
+  onApiKeyChange,
+  onBeginAddKey,
+  onCancelAddKey,
+  onConnectQuota,
+  onCookieChange,
+  onDeleteKey,
+  onDisconnectQuota,
+  onSaveKey,
+  onWorkspaceChange,
+}: {
+  apiKey: string;
+  hasKey: boolean;
+  isAddingKey: boolean;
+  opencodeCookie: string;
+  opencodeQuotaConnected: boolean;
+  opencodeWorkspace: string;
+  providerKey: ProviderKey;
+  onApiKeyChange: (value: string) => void;
+  onBeginAddKey: () => void;
+  onCancelAddKey: () => void;
+  onConnectQuota: () => void;
+  onCookieChange: (value: string) => void;
+  onDeleteKey: () => void;
+  onDisconnectQuota: () => void;
+  onSaveKey: () => void;
+  onWorkspaceChange: (value: string) => void;
+}) {
+  return (
+    <section className="provider-setup" aria-label="Provider setup">
+      <div className="section-head">
+        <h3>Provider setup</h3>
+        <p>Connection and provider-specific options.</p>
+      </div>
+
+      {(providerKey === "codex" || providerKey === "claude") && (
+        <p className="section-note">Uses your local CLI login. Disconnect hides this provider until you reconnect it.</p>
+      )}
+
+      {providerKey === "deepseek" &&
+        (hasKey ? (
+          <>
+            <div className="key-row provider-setting-row">
+              <span className="key-status">
+                <span className="auth-dot on" aria-hidden="true" />
+                DeepSeek
+                <span className="setting-meta">API saved</span>
+              </span>
+              <div className="key-actions">
+                <IconOnlyButton icon={<Trash2 size={13} />} label="Delete DeepSeek key" onClick={onDeleteKey} />
+                <IconOnlyButton icon={<Plus size={13} />} label="Replace DeepSeek key" onClick={onBeginAddKey} />
+              </div>
+            </div>
+            {isAddingKey && (
+              <div className="form-grid">
+                <input
+                  aria-label="New DeepSeek API key"
+                  onChange={(event) => onApiKeyChange(event.target.value)}
+                  placeholder="New DeepSeek API key"
+                  type="password"
+                  value={apiKey}
+                />
+                <button disabled={!apiKey.trim()} onClick={onSaveKey} type="button">
+                  Save key
+                </button>
+                <button className="btn ghost" onClick={onCancelAddKey} type="button">
+                  Cancel
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="form-grid">
+            <input
+              aria-label="DeepSeek API key"
+              onChange={(event) => onApiKeyChange(event.target.value)}
+              placeholder="DeepSeek API key"
+              type="password"
+              value={apiKey}
+            />
+            <button disabled={!apiKey.trim()} onClick={onSaveKey} type="button">
+              Save key
+            </button>
+          </div>
+        ))}
+
+      {providerKey === "opencode" && (
+        <>
+          <div className="key-row provider-setting-row">
+            <span className="key-status">
+              <span className={opencodeQuotaConnected ? "auth-dot on" : "auth-dot"} aria-hidden="true" />
+              OpenCode Go limits
+              <span className="setting-meta">{opencodeQuotaConnected ? "Linked" : "Not linked"}</span>
+            </span>
+            {opencodeQuotaConnected && (
+              <IconOnlyButton icon={<Unplug size={13} />} label="Disconnect OpenCode Go limits" onClick={onDisconnectQuota} />
+            )}
+          </div>
+          {!opencodeQuotaConnected && (
+            <div className="form-grid stack">
+              <input
+                aria-label="OpenCode workspace URL or id"
+                onChange={(event) => onWorkspaceChange(event.target.value)}
+                placeholder="Workspace URL or wrk_ id"
+                type="text"
+                value={opencodeWorkspace}
+              />
+              <input
+                aria-label="OpenCode cookie header"
+                onChange={(event) => onCookieChange(event.target.value)}
+                placeholder="Cookie header"
+                type="password"
+                value={opencodeCookie}
+              />
+              <button disabled={!opencodeCookie.trim() || !opencodeWorkspace.trim()} onClick={onConnectQuota} type="button">
+                Link Go limits
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function AnalyticsTile({ label, note, value }: { label: string; note: string; value: string }) {
+  return (
+    <section className="analytics-tile">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{note}</p>
+    </section>
   );
 }
 
@@ -734,6 +1165,8 @@ type ProviderCardProps = {
 function GlanceApp() {
   const [snapshots, setSnapshots] = useState<Record<string, ProviderSnapshot | null>>({});
   const [themeMode, setThemeMode] = useState<ThemeMode>(readThemeMode);
+  const [starredProviders, setStarredProviders] = useState<StarredProviders>(readStarredProviders);
+  const [disconnectedProviders, setDisconnectedProviders] = useState<DisconnectedProviders>(readDisconnectedProviders);
   const glanceWindow = useMemo(() => getCurrentWindow(), []);
   const suppressOpenUntil = useRef(0);
 
@@ -759,6 +1192,8 @@ function GlanceApp() {
     });
     const settingsUnlistenPromise = listen("settings-updated", () => {
       setThemeMode(readThemeMode());
+      setStarredProviders(readStarredProviders());
+      setDisconnectedProviders(readDisconnectedProviders());
     });
     const interval = window.setInterval(() => {
       void loadSnapshots();
@@ -795,11 +1230,19 @@ function GlanceApp() {
     invoke("show_tray_window").catch(() => {});
   }
 
-  const items = [
-    glanceItem("codex", openaiIcon, snapshots.codex, "Session", "Weekly"),
-    glanceItem("claude", anthropicIcon, snapshots.claude, "Session", "Weekly"),
-    glanceItem("opencode", opencodeIcon, snapshots.opencode, "Rolling", "Weekly"),
-  ];
+  const starredKeys = PROVIDERS.filter((provider) => starredProviders[provider.id] && !disconnectedProviders[provider.id]).map(
+    (provider) => provider.id,
+  );
+  const defaultGlanceKeys = (["codex", "claude", "opencode"] as ProviderKey[]).filter((key) => !disconnectedProviders[key]);
+  const glanceKeys = starredKeys.length > 0 ? starredKeys : defaultGlanceKeys;
+  const items = glanceKeys
+    .slice(0, 4)
+    .map((key) => {
+      const meta = PROVIDERS.find((provider) => provider.id === key)!;
+      return key === "deepseek"
+        ? glanceBalanceItem(key, meta.icon, snapshots[key])
+        : glanceItem(key, meta.icon, snapshots[key], key === "opencode" ? "Rolling" : "Session", "Weekly");
+    });
 
   return (
     <button
@@ -819,13 +1262,28 @@ function GlanceApp() {
           </span>
           <span className="glance-metrics">
             <strong>{item.current ?? "--"}</strong>
-            <span aria-hidden="true">|</span>
-            <span>{item.weekly ?? "--"}</span>
+            {item.weekly !== null && (
+              <>
+                <span aria-hidden="true">|</span>
+                <span>{item.weekly ?? "--"}</span>
+              </>
+            )}
           </span>
         </span>
       ))}
     </button>
   );
+}
+
+function glanceBalanceItem(id: ProviderKey, icon: string, snapshot: ProviderSnapshot | null | undefined) {
+  const usd = snapshot?.lines.find((line) => line.label.toUpperCase() === "USD");
+  return {
+    id,
+    icon,
+    current: usd ? dollarLabel(usd.value) : null,
+    weekly: null,
+    empty: !usd,
+  };
 }
 
 function glanceItem(
@@ -844,6 +1302,15 @@ function glanceItem(
     weekly: weekly ? percentLabelFromValue(weekly.value) : null,
     empty: !current && !weekly,
   };
+}
+
+function dollarLabel(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "$0.00";
+  if (trimmed.startsWith("$")) return trimmed;
+  const amount = Number(trimmed);
+  if (Number.isFinite(amount)) return `$${amount.toFixed(2)}`;
+  return trimmed;
 }
 
 function ProviderCard({
@@ -965,34 +1432,14 @@ function IconOnlyButton({ disabled = false, icon, label, onClick }: IconButtonPr
 }
 
 type SettingsSheetProps = {
-  displayMode: DisplayMode;
   themeMode: ThemeMode;
-  disconnectedProviders: DisconnectedProviders;
   glanceEnabled: boolean;
-  onChooseDisplayMode: (mode: DisplayMode) => void;
   onChooseThemeMode: (mode: ThemeMode) => void;
-  hasKey: boolean;
-  isAddingKey: boolean;
-  apiKey: string;
-  opencodeQuotaConnected: boolean;
   refreshEnabled: boolean;
   refreshIntervalMinutes: number;
-  opencodeCookie: string;
-  opencodeWorkspace: string;
-  onApiKeyChange: (value: string) => void;
-  onSaveKey: () => void;
-  onDeleteKey: () => void;
-  onBeginAddKey: () => void;
-  onCancelAddKey: () => void;
-  onConnectQuota: () => void;
-  onDisconnectQuota: () => void;
   onRefreshEnabledChange: (value: boolean) => void;
   onGlanceEnabledChange: (value: boolean) => void;
   onRefreshIntervalChange: (value: number) => void;
-  onWorkspaceChange: (value: string) => void;
-  onCookieChange: (value: string) => void;
-  onDisconnectProvider: (key: ProviderKey) => void;
-  onReconnectProvider: (key: ProviderKey) => void;
 };
 
 function SettingsSheet(props: SettingsSheetProps) {
@@ -1000,14 +1447,9 @@ function SettingsSheet(props: SettingsSheetProps) {
     <section className="settings-sheet" aria-label="Settings">
       <div className="settings-body">
         <SettingsSection title="Display">
-          <div className="seg" aria-label="Display mode" role="group">
-            <button aria-pressed={props.displayMode === "minimal"} onClick={() => props.onChooseDisplayMode("minimal")} type="button">
-              Focus
-            </button>
-            <button aria-pressed={props.displayMode === "all"} onClick={() => props.onChooseDisplayMode("all")} type="button">
-              Dashboard
-            </button>
-          </div>
+          <p className="section-note">
+            Layout follows the window size automatically: compact when small, dashboard when there is room.
+          </p>
           <div className="seg theme-seg" aria-label="Theme mode" role="group">
             <button aria-pressed={props.themeMode === "system"} onClick={() => props.onChooseThemeMode("system")} type="button">
               System
@@ -1079,141 +1521,9 @@ function SettingsSheet(props: SettingsSheetProps) {
           </label>
         </SettingsSection>
 
-        <SettingsSection title="Providers">
-          {LOCAL_LOGIN_PROVIDERS.map((providerKey) => (
-            <ProviderSettingRow
-              connected={!props.disconnectedProviders[providerKey]}
-              info={PROVIDERS.find((provider) => provider.id === providerKey)?.note ?? ""}
-              key={providerKey}
-              name={PROVIDERS.find((provider) => provider.id === providerKey)?.title ?? providerKey}
-              onPrimary={() =>
-                props.disconnectedProviders[providerKey]
-                  ? props.onReconnectProvider(providerKey)
-                  : props.onDisconnectProvider(providerKey)
-              }
-              primaryLabel={props.disconnectedProviders[providerKey] ? "Connect" : "Disconnect"}
-            />
-          ))}
-
-          {props.hasKey ? (
-            <div className="key-row provider-setting-row">
-              <span className="key-status">
-                <span className="auth-dot on" aria-hidden="true" />
-                DeepSeek
-                <span className="setting-meta">API saved</span>
-              </span>
-              <InfoButton label="DeepSeek info" text={PROVIDERS.find((provider) => provider.id === "deepseek")?.note ?? ""} />
-              <div className="key-actions">
-                <IconOnlyButton icon={<Trash2 size={13} />} label="Delete DeepSeek key" onClick={props.onDeleteKey} />
-                <IconOnlyButton icon={<Plus size={13} />} label="Replace DeepSeek key" onClick={props.onBeginAddKey} />
-              </div>
-            </div>
-          ) : (
-            <div className="form-grid">
-              <input
-                aria-label="DeepSeek API key"
-                onChange={(event) => props.onApiKeyChange(event.target.value)}
-                placeholder="DeepSeek API key"
-                type="password"
-                value={props.apiKey}
-              />
-              <button disabled={!props.apiKey.trim()} onClick={props.onSaveKey} type="button">
-                Save key
-              </button>
-            </div>
-          )}
-          {props.hasKey && props.isAddingKey && (
-            <div className="form-grid">
-              <input
-                aria-label="New DeepSeek API key"
-                onChange={(event) => props.onApiKeyChange(event.target.value)}
-                placeholder="New DeepSeek API key"
-                type="password"
-                value={props.apiKey}
-              />
-              <button disabled={!props.apiKey.trim()} onClick={props.onSaveKey} type="button">
-                Save key
-              </button>
-              <button className="btn ghost" onClick={props.onCancelAddKey} type="button">
-                Cancel
-              </button>
-            </div>
-          )}
-
-          <div className="key-row provider-setting-row">
-            <span className="key-status">
-              <span className={props.opencodeQuotaConnected ? "auth-dot on" : "auth-dot"} aria-hidden="true" />
-              OpenCode Go limits
-              <span className="setting-meta">{props.opencodeQuotaConnected ? "Linked" : "Not linked"}</span>
-            </span>
-            <InfoButton label="OpenCode Go limits info" text={PROVIDERS.find((provider) => provider.id === "opencode")?.note ?? ""} />
-            {props.opencodeQuotaConnected && (
-              <IconOnlyButton icon={<Unplug size={13} />} label="Disconnect OpenCode Go limits" onClick={props.onDisconnectQuota} />
-            )}
-          </div>
-          {!props.opencodeQuotaConnected && (
-            <div className="form-grid stack">
-              <input
-                aria-label="OpenCode workspace URL or id"
-                onChange={(event) => props.onWorkspaceChange(event.target.value)}
-                placeholder="Workspace URL or wrk_ id"
-                type="text"
-                value={props.opencodeWorkspace}
-              />
-              <input
-                aria-label="OpenCode cookie header"
-                onChange={(event) => props.onCookieChange(event.target.value)}
-                placeholder="Cookie header"
-                type="password"
-                value={props.opencodeCookie}
-              />
-              <button
-                disabled={!props.opencodeCookie.trim() || !props.opencodeWorkspace.trim()}
-                onClick={props.onConnectQuota}
-                type="button"
-              >
-                Link Go limits
-              </button>
-            </div>
-          )}
-        </SettingsSection>
-
-        <p className="storage-note">Snapshots are stored locally on this device.</p>
+        <p className="storage-note">Provider setup now lives on each provider page. Snapshots are stored locally on this device.</p>
       </div>
     </section>
-  );
-}
-
-function ProviderSettingRow({
-  connected,
-  info,
-  name,
-  onPrimary,
-  primaryLabel,
-}: {
-  connected: boolean;
-  info: string;
-  name: string;
-  onPrimary: () => void;
-  primaryLabel: string;
-}) {
-  return (
-    <div className="key-row provider-setting-row">
-      <span className="key-status">
-        <span className={connected ? "auth-dot on" : "auth-dot"} aria-hidden="true" />
-        {name}
-      </span>
-      <InfoButton label={`${name} info`} text={info} />
-      <IconOnlyButton icon={connected ? <Unplug size={13} /> : <PlugZap size={13} />} label={`${primaryLabel} ${name}`} onClick={onPrimary} />
-    </div>
-  );
-}
-
-function InfoButton({ label, text }: { label: string; text: string }) {
-  return (
-    <button aria-label={label} className="info-button" title={text} type="button">
-      <Info aria-hidden="true" size={13} />
-    </button>
   );
 }
 

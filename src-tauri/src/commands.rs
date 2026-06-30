@@ -197,20 +197,6 @@ pub fn request_tray_close(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn set_tray_popped_out(app: tauri::AppHandle, popped_out: bool) -> Result<(), String> {
-    tray::set_popped_out(&app, popped_out).map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-pub fn set_tray_display_mode(app: tauri::AppHandle, mode: String) -> Result<(), String> {
-    if mode != "minimal" && mode != "all" {
-        return Err("Unknown tray display mode".to_string());
-    }
-
-    tray::set_display_mode(&app, &mode).map_err(|error| error.to_string())
-}
-
-#[tauri::command]
 pub fn set_glance_visible(
     app: tauri::AppHandle,
     visible: bool,

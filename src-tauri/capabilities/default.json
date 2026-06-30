@@ -3,5 +3,10 @@
   "identifier": "default",
   "description": "Capability for the main and glance windows",
   "windows": ["main", "glance"],
-  "permissions": ["core:default", "core:window:default", "core:window:allow-start-dragging"]
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-start-resize-dragging"
+  ]
 }
