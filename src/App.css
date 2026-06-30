@@ -673,7 +673,7 @@ input:focus-visible,
 .dashboard-main {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 10px;
 }
 
@@ -706,6 +706,68 @@ input:focus-visible,
   flex: 0 0 auto;
   color: var(--faint);
   font-weight: 700;
+}
+
+.provider-detail {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  align-items: stretch;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  background: var(--plate);
+}
+
+.provider-detail .metric-list {
+  margin-top: 6px;
+}
+
+.provider-detail .provider-foot {
+  display: none;
+}
+
+.detail-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.detail-mark {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--plate-border);
+  border-radius: var(--radius);
+  background: var(--logo-plate);
+}
+
+.detail-mark img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.detail-heading h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.1;
+}
+
+.detail-heading p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.provider-detail .provider-card {
+  animation: none;
 }
 
 .provider-list {

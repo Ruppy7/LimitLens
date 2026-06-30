@@ -585,6 +585,8 @@ function App() {
     );
   }
 
+  const selectedProviderMeta = PROVIDERS.find((provider) => provider.id === selectedProvider) ?? PROVIDERS[0];
+
   return (
     <main
       className={`${displayMode === "minimal" ? "panel minimal" : "panel"}${opening ? " opening" : ""}${closing ? " closing" : ""}`}
@@ -705,6 +707,20 @@ function App() {
                 </div>
                 <span>{Object.values(snapshots).filter(Boolean).length} synced</span>
               </div>
+            )}
+            {displayMode === "all" && (
+              <section className="provider-detail" aria-label={`${selectedProviderMeta.title} details`}>
+                <div className="detail-heading">
+                  <span className="detail-mark">
+                    <img alt="" src={selectedProviderMeta.icon} />
+                  </span>
+                  <div>
+                    <h2>{selectedProviderMeta.title}</h2>
+                    <p>{selectedProviderMeta.note}</p>
+                  </div>
+                </div>
+                {cardFor(selectedProvider)}
+              </section>
             )}
             <div className="provider-list" key={displayMode === "minimal" ? selectedProvider : "all"}>
               {displayMode === "minimal"
