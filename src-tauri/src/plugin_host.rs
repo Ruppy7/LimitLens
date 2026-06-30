@@ -138,14 +138,14 @@ function probe(ctx) {
 const OPENCODE_PROVIDER: &str = r#"
 function quotaLine(label, window) {
   if (!window) return null;
-  const used =
+  const remaining =
     window.usage_percent !== null && window.usage_percent !== undefined
-      ? `${window.usage_percent}% used`
+      ? `${Math.max(0, Math.min(100, Math.round(100 - window.usage_percent)))}%`
       : (window.status || "n/a");
   const reset = window.reset_in_sec !== null && window.reset_in_sec !== undefined
     ? ` - Resets in ${resetDuration(window.reset_in_sec)}`
     : "";
-  return { label, value: `${used}${reset}` };
+  return { label, value: `${remaining}${reset}` };
 }
 
 function probe(ctx) {
@@ -593,7 +593,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(labels, vec!["Rolling", "Weekly", "Monthly"]);
-        assert_eq!(snapshot.lines[0].value, "0% used - Resets in 5h 0m");
-        assert_eq!(snapshot.lines[2].value, "9% used - Resets in 13d 19h");
+        assert_eq!(snapshot.lines[0].value, "100% - Resets in 5h 0m");
+        assert_eq!(snapshot.lines[2].value, "91% - Resets in 13d 19h");
     }
 }

@@ -75,7 +75,8 @@
   }
 }
 
-.panel[data-theme="light"] {
+.panel[data-theme="light"],
+.glance-bar[data-theme="light"] {
   color: #18181b;
 
   --bg: #ececef;
@@ -102,7 +103,8 @@
   --connected: #16a34a;
 }
 
-.panel[data-theme="dark"] {
+.panel[data-theme="dark"],
+.glance-bar[data-theme="dark"] {
   color: #fafafa;
 
   --bg: #09090b;
@@ -129,7 +131,8 @@
   --connected: #22c55e;
 }
 
-.panel[data-theme="tokyo-night"] {
+.panel[data-theme="tokyo-night"],
+.glance-bar[data-theme="tokyo-night"] {
   color: #c0caf5;
   font-family: Aptos, "Segoe UI", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 
@@ -174,6 +177,112 @@ body {
 button,
 input {
   font: inherit;
+}
+
+/* ===== Glance window ===== */
+.glance-bar {
+  width: 100vw;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 5px repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  padding: 3px 4px 3px 3px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  outline: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.glance-bar:hover {
+  background: var(--hover);
+}
+
+.glance-bar:focus-visible {
+  border-color: var(--accent);
+}
+
+.glance-grip {
+  grid-row: 1 / -1;
+  align-self: stretch;
+  border-radius: 3px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 2px,
+    var(--plate-border) 2px,
+    var(--plate-border) 4px,
+    transparent 4px,
+    transparent 7px
+  );
+  background-size: 100% 7px;
+  cursor: grab;
+}
+
+.glance-cell {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 3px;
+  padding: 0 2px 0 0;
+  border-radius: 4px;
+  background: transparent;
+  border: 0;
+}
+
+.glance-cell.empty {
+  opacity: 0.58;
+}
+
+.glance-icon {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  background: var(--logo-plate);
+  border: 1px solid var(--plate-border);
+}
+
+.glance-icon img {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+.glance-metrics {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto auto auto;
+  align-items: baseline;
+  gap: 2px;
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.glance-metrics strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+}
+
+.glance-metrics span {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.glance-metrics span[aria-hidden="true"] {
+  color: var(--faint);
+  font-weight: 500;
 }
 
 /* ===== Panel / window ===== */
@@ -679,16 +788,10 @@ input:focus-visible,
   background: var(--line);
 }
 
-/* The accent bar is the only saturated color on the card: your usage. */
-.metric-progress svg {
-  display: block;
-  width: 100%;
+.metric-progress-fill {
   height: 100%;
-}
-
-.metric-progress rect {
   border-radius: inherit;
-  fill: var(--accent);
+  background: var(--accent);
   transition: width 340ms ease;
 }
 

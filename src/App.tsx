@@ -1,6 +1,6 @@
-import { type PointerEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type PointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   AlertTriangle,
@@ -53,6 +53,7 @@ type ThemeMode = "system" | "light" | "dark" | "tokyo-night";
 type ProviderKey = "codex" | "claude" | "deepseek" | "opencode";
 type LifecycleState = "refreshing" | "fresh" | "stale" | "error" | "empty";
 type DisconnectedProviders = Partial<Record<ProviderKey, boolean>>;
+const WINDOW_LABEL = getCurrentWindow().label;
 
 const STALE_AFTER_SECONDS = 15 * 60;
 const DEFAULT_REFRESH_INTERVAL_MINUTES = 15;
@@ -100,6 +101,28 @@ function readRefreshEnabled() {
   return readPersisted("limitlens.refreshEnabled", "false") === "true";
 }
 
+function readGlanceEnabled() {
+  return readPersisted("limitlens.glanceEnabled", "true") !== "false";
+}
+
+type GlancePosition = {
+  x: number;
+  y: number;
+};
+
+function readGlancePosition(): GlancePosition | null {
+  const value = readPersisted("limitlens.glancePosition", "");
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(value) as GlancePosition;
+    if (!Number.isFinite(parsed.x) || !Number.isFinite(parsed.y)) return null;
+    return { x: Math.round(parsed.x), y: Math.round(parsed.y) };
+  } catch {
+    return null;
+  }
+}
+
 function readRefreshIntervalMinutes() {
   const value = Number(readPersisted("limitlens.refreshIntervalMinutes", String(DEFAULT_REFRESH_INTERVAL_MINUTES)));
   if (!Number.isFinite(value)) return DEFAULT_REFRESH_INTERVAL_MINUTES;
@@ -117,6 +140,12 @@ function readDisconnectedProviders(): DisconnectedProviders {
   } catch {
     return {};
   }
+}
+
+function percentLabelFromValue(value: string): string | null {
+  const percent = percentFromValue(value);
+  if (percent === null) return null;
+  return `${Math.max(0, Math.min(100, Math.round(percent)))}%`;
 }
 
 function persist(key: string, value: string) {
@@ -163,6 +192,10 @@ function BrandMark() {
 }
 
 function App() {
+  if (WINDOW_LABEL === "glance") {
+    return <GlanceApp />;
+  }
+
   const [snapshots, setSnapshots] = useState<Record<ProviderKey, ProviderSnapshot | null>>({
     codex: null,
     claude: null,
@@ -211,6 +244,7 @@ function App() {
   const [refreshEnabled, setRefreshEnabled] = useState(readRefreshEnabled);
   const [refreshIntervalMinutes, setRefreshIntervalMinutes] = useState(readRefreshIntervalMinutes);
   const [disconnectedProviders, setDisconnectedProviders] = useState<DisconnectedProviders>(readDisconnectedProviders);
+  const [glanceEnabled, setGlanceEnabled] = useState(readGlanceEnabled);
 
   const savedKeyCount = useMemo(() => keySlots.filter((slot) => slot.has_key).length, [keySlots]);
   const savedKeySlot = useMemo(() => keySlots.find((slot) => slot.has_key), [keySlots]);
@@ -293,6 +327,7 @@ function App() {
 
   useEffect(() => {
     persist("limitlens.themeMode", themeMode);
+    emit("settings-updated").catch(() => {});
   }, [themeMode]);
 
   useEffect(() => {
@@ -311,6 +346,15 @@ function App() {
   useEffect(() => {
     persist("limitlens.refreshEnabled", String(refreshEnabled));
   }, [refreshEnabled]);
+
+  useEffect(() => {
+    persist("limitlens.glanceEnabled", String(glanceEnabled));
+    const position = readGlancePosition();
+    invoke(
+      "set_glance_visible",
+      position ? { visible: glanceEnabled, x: position.x, y: position.y } : { visible: glanceEnabled },
+    ).catch(() => {});
+  }, [glanceEnabled]);
 
   useEffect(() => {
     if (!refreshEnabled) return;
@@ -335,6 +379,7 @@ function App() {
       const snapshot = await fn();
       setSnapshots((current) => ({ ...current, [key]: snapshot }));
       setLastUpdatedAt((current) => ({ ...current, [key]: Math.floor(Date.now() / 1000) }));
+      emit("snapshots-updated").catch(() => {});
     } catch (caught) {
       setProviderError(key, String(caught));
     } finally {
@@ -601,6 +646,7 @@ function App() {
           displayMode={displayMode}
           themeMode={themeMode}
           disconnectedProviders={disconnectedProviders}
+          glanceEnabled={glanceEnabled}
           onChooseDisplayMode={chooseDisplayMode}
           onChooseThemeMode={setThemeMode}
           hasKey={hasKey}
@@ -619,6 +665,7 @@ function App() {
           onConnectQuota={connectQuota}
           onDisconnectQuota={disconnectQuota}
           onRefreshEnabledChange={setRefreshEnabled}
+          onGlanceEnabledChange={setGlanceEnabled}
           onRefreshIntervalChange={chooseRefreshInterval}
           onWorkspaceChange={setOpencodeWorkspace}
           onCookieChange={setOpencodeCookie}
@@ -683,6 +730,121 @@ type ProviderCardProps = {
   onRefresh: () => void;
   emptyHint?: string | null;
 };
+
+function GlanceApp() {
+  const [snapshots, setSnapshots] = useState<Record<string, ProviderSnapshot | null>>({});
+  const [themeMode, setThemeMode] = useState<ThemeMode>(readThemeMode);
+  const glanceWindow = useMemo(() => getCurrentWindow(), []);
+  const suppressOpenUntil = useRef(0);
+
+  async function loadSnapshots() {
+    try {
+      const savedSnapshots = await invoke<SavedSnapshot[]>("list_saved_snapshots");
+      setSnapshots(
+        savedSnapshots.reduce<Record<string, ProviderSnapshot>>((next, saved) => {
+          next[saved.provider_id] = saved.snapshot;
+          return next;
+        }, {}),
+      );
+    } catch {
+      setSnapshots({});
+    }
+  }
+
+  useEffect(() => {
+    void loadSnapshots();
+
+    const unlistenPromise = listen("snapshots-updated", () => {
+      void loadSnapshots();
+    });
+    const settingsUnlistenPromise = listen("settings-updated", () => {
+      setThemeMode(readThemeMode());
+    });
+    const interval = window.setInterval(() => {
+      void loadSnapshots();
+    }, 60_000);
+
+    return () => {
+      window.clearInterval(interval);
+      unlistenPromise.then((unlisten) => unlisten()).catch(() => {});
+      settingsUnlistenPromise.then((unlisten) => unlisten()).catch(() => {});
+    };
+  }, []);
+
+  function startDrag(event: PointerEvent<HTMLButtonElement>) {
+    if (event.button !== 0 || !(event.target as HTMLElement).closest(".glance-grip")) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    suppressOpenUntil.current = Date.now() + 900;
+    void glanceWindow.startDragging();
+    window.setTimeout(() => {
+      void glanceWindow.outerPosition().then((position) => {
+        persist("limitlens.glancePosition", JSON.stringify({ x: position.x, y: position.y }));
+        invoke("set_glance_position", { x: position.x, y: position.y }).catch(() => {});
+      });
+    }, 600);
+  }
+
+  function openDashboard() {
+    if (Date.now() < suppressOpenUntil.current) {
+      return;
+    }
+    invoke("show_tray_window").catch(() => {});
+  }
+
+  const items = [
+    glanceItem("codex", openaiIcon, snapshots.codex, "Session", "Weekly"),
+    glanceItem("claude", anthropicIcon, snapshots.claude, "Session", "Weekly"),
+    glanceItem("opencode", opencodeIcon, snapshots.opencode, "Rolling", "Weekly"),
+  ];
+
+  return (
+    <button
+      aria-label="Open LimitLens dashboard"
+      className="glance-bar"
+      data-theme={themeMode}
+      onClick={openDashboard}
+      onPointerDown={startDrag}
+      title="Drag to position. Click to open LimitLens dashboard."
+      type="button"
+    >
+      <span className="glance-grip" aria-hidden="true" />
+      {items.map((item) => (
+        <span className={item.empty ? "glance-cell empty" : "glance-cell"} key={item.id}>
+          <span className="glance-icon">
+            <img alt="" src={item.icon} />
+          </span>
+          <span className="glance-metrics">
+            <strong>{item.current ?? "--"}</strong>
+            <span aria-hidden="true">|</span>
+            <span>{item.weekly ?? "--"}</span>
+          </span>
+        </span>
+      ))}
+    </button>
+  );
+}
+
+function glanceItem(
+  id: ProviderKey,
+  icon: string,
+  snapshot: ProviderSnapshot | null | undefined,
+  currentLabel: string,
+  weeklyLabel: string,
+) {
+  const current = snapshot?.lines.find((line) => line.label === currentLabel);
+  const weekly = snapshot?.lines.find((line) => line.label === weeklyLabel);
+  return {
+    id,
+    icon,
+    current: current ? percentLabelFromValue(current.value) : null,
+    weekly: weekly ? percentLabelFromValue(weekly.value) : null,
+    empty: !current && !weekly,
+  };
+}
 
 function ProviderCard({
   icon,
@@ -780,9 +942,7 @@ function MetricRow({ line }: { line: MetricLine }) {
           className="metric-progress"
           role="progressbar"
         >
-          <svg aria-hidden="true" focusable="false" preserveAspectRatio="none" viewBox="0 0 100 8">
-            <rect height="8" rx="4" width={percent} x="0" y="0" />
-          </svg>
+          <div className="metric-progress-fill" style={{ width: `${percent}%` }} />
         </div>
       )}
     </div>
@@ -808,6 +968,7 @@ type SettingsSheetProps = {
   displayMode: DisplayMode;
   themeMode: ThemeMode;
   disconnectedProviders: DisconnectedProviders;
+  glanceEnabled: boolean;
   onChooseDisplayMode: (mode: DisplayMode) => void;
   onChooseThemeMode: (mode: ThemeMode) => void;
   hasKey: boolean;
@@ -826,6 +987,7 @@ type SettingsSheetProps = {
   onConnectQuota: () => void;
   onDisconnectQuota: () => void;
   onRefreshEnabledChange: (value: boolean) => void;
+  onGlanceEnabledChange: (value: boolean) => void;
   onRefreshIntervalChange: (value: number) => void;
   onWorkspaceChange: (value: string) => void;
   onCookieChange: (value: string) => void;
@@ -860,6 +1022,22 @@ function SettingsSheet(props: SettingsSheetProps) {
               Tokyo
             </button>
           </div>
+        </SettingsSection>
+
+        <SettingsSection title="Glance">
+          <label className="toggle-row">
+            <span>
+              <strong>Glance widget</strong>
+              <em>{props.glanceEnabled ? "Codex visible" : "Off"}</em>
+            </span>
+            <input
+              aria-label="Glance widget"
+              checked={props.glanceEnabled}
+              className="toggle-switch"
+              onChange={(event) => props.onGlanceEnabledChange(event.target.checked)}
+              type="checkbox"
+            />
+          </label>
         </SettingsSection>
 
         <SettingsSection title="Refresh">
