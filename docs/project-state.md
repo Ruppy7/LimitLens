@@ -8,7 +8,7 @@ Last checked: 2026-06-30
 - GitHub repo: `https://github.com/Ruppy7/LimitLens`.
 - Main development branch: `main`.
 - Current merged commit: `9c6e339` (`Fix v0.1 audit follow-ups (#2)`).
-- Active feature branch: `codex/glance-window`.
+- Active review branch: `codex/glance-window` for PR #3. New branches should use conventional prefixes such as `feat/` or `fix/`.
 - Stack: Tauri v2, React, TypeScript, Vite, Rust.
 - Package manager: npm.
 - Distribution: unsigned Windows NSIS installer, portable zip, and SHA256 checksums through GitHub Releases.
@@ -36,7 +36,7 @@ Last checked: 2026-06-30
 - `v0.1.0` is released and public.
 - LinkedIn launch post is done.
 - Audit follow-up PR #2 is merged.
-- Completed local/remote work branches were deleted after the v0.1 cleanup; new feature work now happens on `codex/<feature-name>` branches.
+- Completed local/remote work branches were deleted after the v0.1 cleanup; new feature work now happens on conventionally named branches such as `feat/<feature-name>`, `fix/<bug-name>`, `docs/<topic>`, `chore/<task>`, or `refactor/<area>`.
 - CSP no longer allows inline styles.
 - Snapshot writes are atomic.
 - Provider 429 responses return explicit rate-limit messages.
@@ -44,7 +44,8 @@ Last checked: 2026-06-30
 ## Branch, PR, and release workflow
 
 - `main` is the stable integration branch.
-- Feature work should happen on scoped branches such as `codex/glance-window` or `codex/resizable-dashboard`.
+- Feature work should happen on scoped branches such as `feat/resizable-dashboard`.
+- Do not create new `codex/` branches; keep that prefix historical only.
 - Each meaningful feature or architecture change gets a PR into `main`; the PR is the review checkpoint with summary, checks, and screenshots where useful.
 - Versioned public builds should come from tags such as `v0.1.1` or `v0.2.0`, not directly from feature branches.
 - Patch releases (`v0.1.x`) are for fixes and small safe improvements. Minor releases (`v0.2.0`) are for larger user-facing batches such as dashboard evolution or provider expansion.

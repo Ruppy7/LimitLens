@@ -47,7 +47,7 @@ Decision → Concept → Build → Checkpoint
 
 | D20 | Main window direction | Fixed tray popup with Focus/Dashboard toggle - resizable dashboard app - separate compact/full windows | Planned: **resizable responsive dashboard** | The glance widget now covers the quick-focus job. Next, evolve the main window into the complete dashboard surface: resizable, analytics-friendly, and able to collapse into compact layouts below breakpoints instead of keeping a permanent Focus view. Exact breakpoint and taskbar behavior remain open until the first dashboard resize spike. |
 
-| D21 | Open-source workflow | Direct commits to main - long-running review branch - short feature branches with PRs | Decided: **feature branches + PR checkpoints** | Use `main` as the stable integration branch, build meaningful features on scoped branches such as `codex/glance-window`, and open PRs for review/checks before merging. Versioned public builds come from tags (`v0.1.x`, `v0.2.0`) rather than feature branches. |
+| D21 | Open-source workflow | Direct commits to main - long-running review branch - short feature branches with PRs | Decided: **feature branches + PR checkpoints** | Use `main` as the stable integration branch, build meaningful features on scoped branches with conventional prefixes such as `feat/`, `fix/`, `docs/`, `chore/`, or `refactor/`, and open PRs for review/checks before merging. Do not create new `codex/` branches. Versioned public builds come from tags (`v0.1.x`, `v0.2.0`) rather than feature branches. |
 
 ## Scaffold decision
 

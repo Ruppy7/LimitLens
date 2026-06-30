@@ -29,7 +29,8 @@ LimitLens should evolve from a tray quota viewer into a unified AI usage dashboa
 LimitLens now uses a normal open-source feature flow:
 
 - `main` is the stable integration branch.
-- Build features on scoped branches, usually `codex/<feature-name>`.
+- Build features on scoped branches with conventional prefixes: `feat/`, `fix/`, `docs/`, `chore/`, or `refactor/`.
+- Do not create new `codex/` branches; older `codex/*` branches are historical only.
 - Open a PR for each meaningful feature, provider integration, or architecture change.
 - Treat the PR as the checkpoint: include summary, checks, screenshots for UI changes, and any decision notes.
 - Merge after review/smoke testing, then start the next feature from updated `main`.
