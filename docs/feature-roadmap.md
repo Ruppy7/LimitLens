@@ -52,12 +52,14 @@ Initial display format:
 
 ```text
 [provider icon] 34% | 62%
+[provider icon] $0.85
 ```
 
 Meaning:
 
 - `34%` - current/session remaining percent.
 - `62%` - weekly remaining percent.
+- `$0.85` - direct balance for providers that do not expose session/weekly limits.
 
 First slice:
 
