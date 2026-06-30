@@ -82,22 +82,25 @@ Possible future setting:
 
 ### F2 - Dashboard-Only Main Window
 
-**Status:** Planned after F1 proves usable
+**Status:** In Progress
 
 Goal: remove the current Focus view and make the main window the full dashboard/settings surface.
 
 Plan:
 
-- Make the main window resizable with a sensible minimum size.
-- Remove the provider rail/minimal Focus mode after the glance window covers that job.
+- Make the main window resizable with a sensible minimum size. Implemented in first slice.
+- Remove the main-window pin control and main-window always-on-top behavior. Implemented in first slice.
+- Show the main dashboard as a normal taskbar-visible app window. Implemented in first slice.
+- Replace the scaled-up tray card list with an app shell: top bar, provider sidebar, and main dashboard content grid. Implemented in first slice.
+- Keep compact behavior as a responsive small-window layout rather than a manual Focus mode.
 - Keep tray icon click as the main dashboard launcher.
 - Use responsive breakpoints: compact layouts can still behave like the old focus/dashboard views when the window is small, while larger sizes become a full app-style dashboard.
 - Reserve the larger dashboard for analytics that need room: token spend, usage spend, reset banks, history, and provider setup.
 
 Open decision:
 
-- Whether the dashboard should stay hidden from the normal taskbar or become a normal app window when popped out.
-- Exact breakpoint behavior: automatic compact/full layout by size, explicit user mode, or a hybrid where size chooses defaults and the user can override.
+- Exact breakpoint behavior and whether users should get a manual override later.
+- How much of the existing compact provider rail remains after the dashboard shell matures.
 
 ### F3 - Glance Provider Priority
 

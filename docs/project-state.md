@@ -16,11 +16,11 @@ Last checked: 2026-06-30
 
 ## App state
 
-- Windows tray app with a compact undecorated popup.
-- Focus and Dashboard display modes remain in the main popup for now.
+- Windows tray app with a resizable undecorated dashboard window.
+- Manual Focus/Dashboard display modes are being replaced by responsive compact/dashboard layouts based on window size.
 - A draggable always-on-top glance window is implemented on `codex/glance-window`; it shows compact remaining quota values and opens the main dashboard on click.
-- Provider cards, status chips, per-provider refresh, global refresh, optional periodic refresh, theme setting, and floating pop-out.
-- App window is skipped from the normal taskbar.
+- Provider cards, status chips, per-provider refresh, global refresh, optional periodic refresh, theme setting, provider sidebar, and dashboard grid shell.
+- The main window is taskbar-visible; the glance window remains skipped from the normal taskbar.
 
 ## Provider state
 

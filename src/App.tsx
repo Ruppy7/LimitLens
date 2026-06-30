@@ -1,4 +1,4 @@
-import { type PointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type MouseEvent, type PointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -11,8 +11,6 @@ import {
   Info,
   Loader2,
   Minus,
-  Pin,
-  PinOff,
   PlugZap,
   Plus,
   RefreshCw,
@@ -53,8 +51,11 @@ type ThemeMode = "system" | "light" | "dark" | "tokyo-night";
 type ProviderKey = "codex" | "claude" | "deepseek" | "opencode";
 type LifecycleState = "refreshing" | "fresh" | "stale" | "error" | "empty";
 type DisconnectedProviders = Partial<Record<ProviderKey, boolean>>;
+type ResizeDirection = "East" | "North" | "NorthEast" | "NorthWest" | "South" | "SouthEast" | "SouthWest" | "West";
 const WINDOW_LABEL = getCurrentWindow().label;
 
+const COMPACT_LAYOUT_MAX_WIDTH = 519;
+const COMPACT_LAYOUT_MAX_HEIGHT = 419;
 const STALE_AFTER_SECONDS = 15 * 60;
 const DEFAULT_REFRESH_INTERVAL_MINUTES = 15;
 const MIN_REFRESH_INTERVAL_MINUTES = 5;
@@ -78,11 +79,6 @@ const PROVIDERS: ProviderMeta[] = [
 
 const LOCAL_LOGIN_PROVIDERS: ProviderKey[] = ["codex", "claude"];
 
-function readDisplayMode() {
-  const value = readPersisted("limitlens.displayMode", "minimal");
-  return value === "all" || value === "minimal" ? value : "minimal";
-}
-
 function readProviderKey() {
   const value = readPersisted("limitlens.selectedProvider", "codex");
   return PROVIDERS.some((provider) => provider.id === value) ? (value as ProviderKey) : "codex";
@@ -91,10 +87,6 @@ function readProviderKey() {
 function readThemeMode() {
   const value = readPersisted("limitlens.themeMode", "system");
   return value === "system" || value === "light" || value === "dark" || value === "tokyo-night" ? value : "system";
-}
-
-function readPoppedOut() {
-  return readPersisted("limitlens.poppedOut", "false") === "true";
 }
 
 function readRefreshEnabled() {
@@ -191,6 +183,25 @@ function BrandMark() {
   return <img className="brand-mark" src={limitLensLogo} alt="" aria-hidden="true" />;
 }
 
+function useResponsiveDisplayMode(): DisplayMode {
+  const [size, setSize] = useState(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }));
+
+  useEffect(() => {
+    function updateSize() {
+      setSize({ width: window.innerWidth, height: window.innerHeight });
+    }
+
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
+  }, []);
+
+  return size.width <= COMPACT_LAYOUT_MAX_WIDTH || size.height <= COMPACT_LAYOUT_MAX_HEIGHT ? "minimal" : "all";
+}
+
 function App() {
   if (WINDOW_LABEL === "glance") {
     return <GlanceApp />;
@@ -230,16 +241,13 @@ function App() {
   const [opencodeWorkspace, setOpencodeWorkspace] = useState("");
 
   const [themeMode, setThemeMode] = useState<ThemeMode>(readThemeMode);
-  const [displayMode, setDisplayMode] = useState<DisplayMode>(
-    readDisplayMode,
-  );
+  const displayMode = useResponsiveDisplayMode();
   const [selectedProvider, setSelectedProvider] = useState<ProviderKey>(
     readProviderKey,
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [opening, setOpening] = useState(false);
   const [closing, setClosing] = useState(false);
-  const [poppedOut, setPoppedOut] = useState(readPoppedOut);
   const [nowSeconds, setNowSeconds] = useState(() => Math.floor(Date.now() / 1000));
   const [refreshEnabled, setRefreshEnabled] = useState(readRefreshEnabled);
   const [refreshIntervalMinutes, setRefreshIntervalMinutes] = useState(readRefreshIntervalMinutes);
@@ -314,14 +322,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    persist("limitlens.displayMode", displayMode);
-  }, [displayMode]);
-
-  useEffect(() => {
-    invoke("set_tray_display_mode", { mode: settingsOpen ? "all" : displayMode }).catch(() => {});
-  }, [displayMode, settingsOpen]);
-
-  useEffect(() => {
     persist("limitlens.selectedProvider", selectedProvider);
   }, [selectedProvider]);
 
@@ -329,11 +329,6 @@ function App() {
     persist("limitlens.themeMode", themeMode);
     emit("settings-updated").catch(() => {});
   }, [themeMode]);
-
-  useEffect(() => {
-    persist("limitlens.poppedOut", String(poppedOut));
-    invoke("set_tray_popped_out", { poppedOut }).catch(() => {});
-  }, [poppedOut]);
 
   useEffect(() => {
     persist("limitlens.disconnectedProviders", JSON.stringify(disconnectedProviders));
@@ -408,11 +403,6 @@ function App() {
     if (!disconnectedProviders.deepseek && hasKey) tasks.push(refreshDeepSeek());
     if (!disconnectedProviders.opencode && opencodeQuotaConnected) tasks.push(refreshOpenCode());
     await Promise.allSettled(tasks);
-  }
-
-  function chooseDisplayMode(mode: DisplayMode) {
-    setDisplayMode(mode);
-    setSettingsOpen(false);
   }
 
   function chooseRefreshInterval(value: number) {
@@ -534,6 +524,13 @@ function App() {
     void getCurrentWindow().startDragging();
   }
 
+  function startWindowResize(direction: ResizeDirection, event: MouseEvent<HTMLElement> | PointerEvent<HTMLElement>) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void getCurrentWindow().startResizeDragging(direction);
+  }
+
   function hideTray() {
     invoke("request_tray_close").catch(() => invoke("hide_tray_window").catch(() => {}));
   }
@@ -592,10 +589,25 @@ function App() {
     <main
       className={`${displayMode === "minimal" ? "panel minimal" : "panel"}${opening ? " opening" : ""}${closing ? " closing" : ""}`}
       data-theme={themeMode}
-      data-floating={poppedOut}
-      onPointerDown={poppedOut ? startWindowDrag : undefined}
     >
-      <header className="panel-header">
+      {[
+        ["resize-grip-n", "North"],
+        ["resize-grip-e", "East"],
+        ["resize-grip-s", "South"],
+        ["resize-grip-w", "West"],
+        ["resize-grip-ne", "NorthEast"],
+        ["resize-grip-nw", "NorthWest"],
+        ["resize-grip-se", "SouthEast"],
+        ["resize-grip-sw", "SouthWest"],
+      ].map(([className, direction]) => (
+        <span
+          aria-hidden="true"
+          className={`resize-grip ${className}`}
+          key={direction}
+          onMouseDown={(event) => startWindowResize(direction as ResizeDirection, event)}
+        />
+      ))}
+      <header className="panel-header" onPointerDown={startWindowDrag}>
         <div className="brand">
           <BrandMark />
           <div className="brand-text">
@@ -625,16 +637,6 @@ function App() {
           >
             {settingsOpen ? <ArrowLeft aria-hidden="true" size={15} /> : <Settings aria-hidden="true" size={15} />}
           </button>
-          <button
-            aria-label={poppedOut ? "Floating window - attach to tray" : "Attached to tray - pop out"}
-            aria-pressed={poppedOut}
-            className="icon-button pin-button"
-            onClick={() => setPoppedOut((current) => !current)}
-            title={poppedOut ? "Floating window" : "Attached to tray"}
-            type="button"
-          >
-            {poppedOut ? <PinOff aria-hidden="true" size={15} /> : <Pin aria-hidden="true" size={15} />}
-          </button>
           <button aria-label="Hide window" className="icon-button" onClick={hideTray} type="button">
             <Minus aria-hidden="true" size={15} />
           </button>
@@ -643,11 +645,9 @@ function App() {
 
       {settingsOpen ? (
         <SettingsSheet
-          displayMode={displayMode}
           themeMode={themeMode}
           disconnectedProviders={disconnectedProviders}
           glanceEnabled={glanceEnabled}
-          onChooseDisplayMode={chooseDisplayMode}
           onChooseThemeMode={setThemeMode}
           hasKey={hasKey}
           isAddingKey={isAddingKey}
@@ -673,14 +673,15 @@ function App() {
           onReconnectProvider={reconnectProvider}
         />
       ) : (
-        <section className={displayMode === "minimal" ? "provider-browser" : "provider-browser all"} aria-label="Providers">
-          {displayMode === "minimal" && (
-            <nav className="provider-rail" aria-label="Pick provider">
+        <section className={displayMode === "minimal" ? "dashboard-shell compact" : "dashboard-shell"} aria-label="Dashboard">
+          <aside className="dashboard-sidebar" aria-label="Providers">
+            <p className="sidebar-title">Providers</p>
+            <nav className="provider-nav" aria-label="Pick provider">
               {PROVIDERS.map((provider) => (
                 <button
                   aria-label={provider.title}
                   aria-pressed={selectedProvider === provider.id}
-                  className="rail-item"
+                  className="provider-nav-item"
                   key={provider.id}
                   onClick={() => setSelectedProvider(provider.id)}
                   type="button"
@@ -688,20 +689,32 @@ function App() {
                   <span className="rail-mark">
                     <img alt="" src={provider.icon} />
                   </span>
+                  <span className="provider-nav-label">{provider.title}</span>
                   <span className={authConnected(provider.id) ? "rail-dot on" : "rail-dot"} />
                 </button>
               ))}
             </nav>
-          )}
+          </aside>
 
-          <div className="provider-list" key={displayMode === "minimal" ? selectedProvider : "all"}>
-            {displayMode === "minimal"
-              ? cardFor(selectedProvider)
-              : PROVIDERS.map((provider) => (
-                  <section aria-label={provider.title} className="card-slot" key={provider.id}>
-                    {cardFor(provider.id)}
-                  </section>
-                ))}
+          <div className="dashboard-main">
+            {displayMode === "all" && (
+              <div className="dashboard-intro">
+                <div>
+                  <h2>Dashboard</h2>
+                  <p>Current quota snapshots across connected providers.</p>
+                </div>
+                <span>{Object.values(snapshots).filter(Boolean).length} synced</span>
+              </div>
+            )}
+            <div className="provider-list" key={displayMode === "minimal" ? selectedProvider : "all"}>
+              {displayMode === "minimal"
+                ? cardFor(selectedProvider)
+                : PROVIDERS.map((provider) => (
+                    <section aria-label={provider.title} className="card-slot" key={provider.id}>
+                      {cardFor(provider.id)}
+                    </section>
+                  ))}
+            </div>
           </div>
         </section>
       )}
@@ -965,11 +978,9 @@ function IconOnlyButton({ disabled = false, icon, label, onClick }: IconButtonPr
 }
 
 type SettingsSheetProps = {
-  displayMode: DisplayMode;
   themeMode: ThemeMode;
   disconnectedProviders: DisconnectedProviders;
   glanceEnabled: boolean;
-  onChooseDisplayMode: (mode: DisplayMode) => void;
   onChooseThemeMode: (mode: ThemeMode) => void;
   hasKey: boolean;
   isAddingKey: boolean;
@@ -1000,14 +1011,9 @@ function SettingsSheet(props: SettingsSheetProps) {
     <section className="settings-sheet" aria-label="Settings">
       <div className="settings-body">
         <SettingsSection title="Display">
-          <div className="seg" aria-label="Display mode" role="group">
-            <button aria-pressed={props.displayMode === "minimal"} onClick={() => props.onChooseDisplayMode("minimal")} type="button">
-              Focus
-            </button>
-            <button aria-pressed={props.displayMode === "all"} onClick={() => props.onChooseDisplayMode("all")} type="button">
-              Dashboard
-            </button>
-          </div>
+          <p className="section-note">
+            Layout follows the window size automatically: compact when small, dashboard when there is room.
+          </p>
           <div className="seg theme-seg" aria-label="Theme mode" role="group">
             <button aria-pressed={props.themeMode === "system"} onClick={() => props.onChooseThemeMode("system")} type="button">
               System

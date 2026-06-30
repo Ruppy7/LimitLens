@@ -14,12 +14,14 @@
       {
         "label": "main",
         "title": "LimitLens",
-        "width": 320,
-        "height": 225,
-        "resizable": false,
-        "maximizable": false,
+        "width": 720,
+        "height": 640,
+        "minWidth": 320,
+        "minHeight": 225,
+        "resizable": true,
+        "maximizable": true,
         "decorations": false,
-        "skipTaskbar": true,
+        "skipTaskbar": false,
         "backgroundColor": "#09090b"
       },
       {
