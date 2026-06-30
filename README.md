@@ -24,17 +24,14 @@ It is built with Tauri, React, TypeScript, and Rust. Provider credentials and se
   <img src="assets/screenshots/dashboard.png" alt="LimitLens dashboard showing provider usage cards" width="460">
 </p>
 
-<p align="center">
-  <img src="assets/screenshots/Focus-tray.png" alt="LimitLens focus view for Codex" width="380">
-  <img src="assets/screenshots/Focus-tray-dark.png" alt="LimitLens focus view for OpenCode Go" width="380">
-</p>
-
 ## Providers
 
 - OpenAI Codex: reads local Codex auth and shows quota/reset summary.
 - Claude: reads local Claude credentials and shows quota/reset summary.
 - OpenCode Go: shows authenticated Go limits from the OpenCode workspace page.
 - DeepSeek: optional API balance check, showing USD balance.
+
+The main window is a resizable dashboard. The All view shows cross-provider usage cards and analytics placeholders; selecting a provider opens its detail page for refresh, connection state, setup, starred/glance selection, and future provider-specific analytics.
 
 ## Glance Window
 
@@ -44,9 +41,10 @@ The glance window keeps the display intentionally terse:
 
 ```text
 Provider icon  5h remaining % | weekly remaining %
+Provider icon  $balance
 ```
 
-The main dashboard remains the place for setup, refresh actions, detailed cards, and future analytics.
+Starred providers appear first in the glance window. Providers with session and weekly limits use the percentage format; balance-only providers such as DeepSeek show the balance directly. The main dashboard remains the place for setup, refresh actions, detailed cards, and future analytics.
 
 ## Download
 
@@ -102,7 +100,7 @@ OpenCode Go limits currently use an experimental cookie-backed flow:
 https://opencode.ai/workspace/<your-workspace-id>/go
 ```
 
-3. In LimitLens settings, paste either the workspace URL or the `wrk_...` id.
+3. In the OpenCode Go provider page, paste either the workspace URL or the `wrk_...` id.
 4. Paste the `Cookie` request header from that logged-in browser request.
 
 The cookie is stored in Windows Credential Manager and used only by the Rust host to fetch quota fields. This may break if OpenCode changes the page shape or session behavior.

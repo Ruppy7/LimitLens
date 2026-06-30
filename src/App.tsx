@@ -63,6 +63,16 @@ const DEFAULT_REFRESH_INTERVAL_MINUTES = 15;
 const MIN_REFRESH_INTERVAL_MINUTES = 5;
 const MAX_REFRESH_INTERVAL_MINUTES = 120;
 const archivedOpenCodeSpendLabels = new Set(["Last 7 days", "Last 30 days", "Tokens (30d)", "All-time"]);
+const RESIZE_GRIPS: { className: string; direction: ResizeDirection }[] = [
+  { className: "resize-grip-n", direction: "North" },
+  { className: "resize-grip-e", direction: "East" },
+  { className: "resize-grip-s", direction: "South" },
+  { className: "resize-grip-w", direction: "West" },
+  { className: "resize-grip-ne", direction: "NorthEast" },
+  { className: "resize-grip-nw", direction: "NorthWest" },
+  { className: "resize-grip-se", direction: "SouthEast" },
+  { className: "resize-grip-sw", direction: "SouthWest" },
+];
 
 type ProviderMeta = {
   id: ProviderKey;
@@ -620,37 +630,41 @@ function App() {
     setStarredProviders((current) => ({ ...current, [key]: !current[key] }));
   }
 
-  const orderedProviders = [...PROVIDERS].sort((left, right) => {
-    const leftStarred = starredProviders[left.id] ? 1 : 0;
-    const rightStarred = starredProviders[right.id] ? 1 : 0;
-    return rightStarred - leftStarred;
-  });
-  const visibleProviders = orderedProviders.filter((provider) => !disconnectedProviders[provider.id]);
-  const disconnectedProviderList = PROVIDERS.filter((provider) => disconnectedProviders[provider.id]);
+  const orderedProviders = useMemo(
+    () =>
+      [...PROVIDERS].sort((left, right) => {
+        const leftStarred = starredProviders[left.id] ? 1 : 0;
+        const rightStarred = starredProviders[right.id] ? 1 : 0;
+        return rightStarred - leftStarred;
+      }),
+    [starredProviders],
+  );
+  const visibleProviders = useMemo(
+    () => orderedProviders.filter((provider) => !disconnectedProviders[provider.id]),
+    [disconnectedProviders, orderedProviders],
+  );
+  const disconnectedProviderList = useMemo(
+    () => PROVIDERS.filter((provider) => disconnectedProviders[provider.id]),
+    [disconnectedProviders],
+  );
   const selectedProvider = dashboardView === "all" ? null : dashboardView;
-  const selectedProviderMeta = selectedProvider ? PROVIDERS.find((provider) => provider.id === selectedProvider) ?? PROVIDERS[0] : null;
-  const syncedCount = visibleProviders.filter((provider) => snapshots[provider.id]).length;
+  const selectedProviderMeta = selectedProvider ? PROVIDERS.find((provider) => provider.id === selectedProvider)! : null;
+  const syncedCount = useMemo(
+    () => visibleProviders.filter((provider) => snapshots[provider.id]).length,
+    [snapshots, visibleProviders],
+  );
 
   return (
     <main
       className={`${displayMode === "minimal" ? "panel minimal" : "panel"}${opening ? " opening" : ""}${closing ? " closing" : ""}`}
       data-theme={themeMode}
     >
-      {[
-        ["resize-grip-n", "North"],
-        ["resize-grip-e", "East"],
-        ["resize-grip-s", "South"],
-        ["resize-grip-w", "West"],
-        ["resize-grip-ne", "NorthEast"],
-        ["resize-grip-nw", "NorthWest"],
-        ["resize-grip-se", "SouthEast"],
-        ["resize-grip-sw", "SouthWest"],
-      ].map(([className, direction]) => (
+      {RESIZE_GRIPS.map(({ className, direction }) => (
         <span
           aria-hidden="true"
           className={`resize-grip ${className}`}
           key={direction}
-          onMouseDown={(event) => startWindowResize(direction as ResizeDirection, event)}
+          onMouseDown={(event) => startWindowResize(direction, event)}
         />
       ))}
       <header className="panel-header" onPointerDown={startWindowDrag}>
