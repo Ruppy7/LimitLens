@@ -17,7 +17,7 @@ This is the living tracker for LimitLens feature ideas, implementation plans, re
 LimitLens should evolve from a tray quota viewer into a unified AI usage dashboard:
 
 - A tiny draggable always-on-top **glance window** for high-priority limits.
-- A resizable **dashboard window** for provider details, setup, history, and settings.
+- A resizable **dashboard window** for all-provider analytics, provider details, setup, history, and app settings.
 - A normalized metric model that can separate exact provider-reported usage from inferred, estimated, or local-only usage.
 
 ## Near-Term Implementation Plan
@@ -92,6 +92,11 @@ Plan:
 - Remove the main-window pin control and main-window always-on-top behavior. Implemented in first slice.
 - Show the main dashboard as a normal taskbar-visible app window. Implemented in first slice.
 - Replace the scaled-up tray card list with an app shell: top bar, provider sidebar, and main dashboard content grid. Implemented in first slice.
+- Add an All view for cross-provider usage, token, model, and price summaries. Implemented as the current overview with analytics placeholders.
+- Make provider sidebar clicks replace the main content with that provider's page. Implemented.
+- Move provider-specific setup out of Settings and onto provider detail pages. Implemented.
+- Add starred providers, sort them first in the sidebar, and use starred providers for the glance window when present. Implemented.
+- Add a disabled Add Provider affordance in the sidebar; the real provider picker is a later slice.
 - Keep compact behavior as a responsive small-window layout rather than a manual Focus mode.
 - Keep tray icon click as the main dashboard launcher.
 - Use responsive breakpoints: compact layouts can still behave like the old focus/dashboard views when the window is small, while larger sizes become a full app-style dashboard.
@@ -101,10 +106,11 @@ Open decision:
 
 - Exact breakpoint behavior and whether users should get a manual override later.
 - How much of the existing compact provider rail remains after the dashboard shell matures.
+- Whether Settings remains as a small app-preferences sheet or becomes a dedicated settings page once more customization exists.
 
 ### F3 - Glance Provider Priority
 
-**Status:** Planned after F1
+**Status:** Partially Implemented
 
 Goal: let users pick which providers appear in the glance window.
 
@@ -121,6 +127,18 @@ Rules:
 - Higher-priority providers render first.
 - The glance window renders only providers with enough usable quota fields.
 - Providers with no current data are skipped or shown as a compact warning only if they are high priority.
+
+Current slice:
+
+- Starred providers sort to the top of the dashboard sidebar.
+- The glance window uses starred providers when any supported provider is starred.
+- If no supported provider is starred, the glance window falls back to Codex, Claude, and OpenCode.
+- DeepSeek is skipped for glance until it has a compatible current/weekly limit metric.
+
+Follow-up:
+
+- Replace boolean stars with explicit glance priority/order once provider count grows.
+- Add a real Add Provider / provider picker flow.
 
 ## Metric Model Evolution
 

@@ -7,8 +7,8 @@ Last checked: 2026-06-30
 - Product name: LimitLens.
 - GitHub repo: `https://github.com/Ruppy7/LimitLens`.
 - Main development branch: `main`.
-- Current merged commit: `9c6e339` (`Fix v0.1 audit follow-ups (#2)`).
-- Active review branch: `codex/glance-window` for PR #3. New branches should use conventional prefixes such as `feat/` or `fix/`.
+- Current merged commit: `00a990e` (`Merge pull request #3 from Ruppy7/codex/glance-window`).
+- Active feature branch: `feat/resizable-dashboard`.
 - Stack: Tauri v2, React, TypeScript, Vite, Rust.
 - Package manager: npm.
 - Distribution: unsigned Windows NSIS installer, portable zip, and SHA256 checksums through GitHub Releases.
@@ -18,8 +18,10 @@ Last checked: 2026-06-30
 
 - Windows tray app with a resizable undecorated dashboard window.
 - Manual Focus/Dashboard display modes are being replaced by responsive compact/dashboard layouts based on window size.
-- A draggable always-on-top glance window is implemented on `codex/glance-window`; it shows compact remaining quota values and opens the main dashboard on click.
-- Provider cards, status chips, per-provider refresh, global refresh, optional periodic refresh, theme setting, provider sidebar, and dashboard grid shell.
+- A draggable always-on-top glance window is implemented; it shows compact remaining quota values and opens the main dashboard on click.
+- Provider cards, status chips, per-provider refresh, global refresh, optional periodic refresh, theme setting, provider sidebar, All dashboard view, provider-specific detail pages, and dashboard grid shell.
+- Provider-specific setup now lives on provider detail pages instead of the global Settings sheet. Settings is app-level only for theme, glance, and refresh cadence.
+- Starred providers sort first in the sidebar and drive the glance window when at least one supported provider is starred.
 - The main window is taskbar-visible; the glance window remains skipped from the normal taskbar.
 
 ## Provider state
